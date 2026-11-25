@@ -1,15 +1,16 @@
-/**
- * Cloudflare Worker: phục vụ giao diện (thư mục public/) và chuyển tiếp /api tới Google Apps Script.
- * Logic /api dùng chung với functions/api.js.
- */
-import { onRequestPost, onRequestGet } from '../functions/api.js';
-
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
-    if (url.pathname === '/api') {
-      return request.method === 'POST' ? onRequestPost({ request, env }) : onRequestGet();
-    }
-    return env.ASSETS.fetch(request);
+{
+  // Tên phải TRÙNG với tên Worker đặt trên Cloudflare
+  "name": "crm-tien-loi",
+  "main": "src/worker.js",
+  "compatibility_date": "2025-09-01",
+  // Bật địa chỉ <tên>.<tài-khoản>.workers.dev
+  "workers_dev": true,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api"]
   },
-};
+  // Giữ các biến đã khai báo trên dashboard khi deploy lại
+  "keep_vars": true,
+  "observability": { "enabled": true }
+}
