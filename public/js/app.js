@@ -282,7 +282,7 @@
       const open = deals.filter(isOpen);
       const closed = deals.filter(c => !isOpen(c));
       const winRate = closed.length ? Math.round(closed.filter(c => c.giai_doan === 'Thắng').length / closed.length * 100) : 0;
-      return head('Bán hàng', 'Pipeline',`<button class="btn btn-primary" data-act="new">${icon('plus', 15)} Thêm cơ hội</button>`) +
+      return head('Bán hàng', 'Pipeline','',`<button class="btn btn-primary" data-act="new">${icon('plus', 15)} Thêm cơ hội</button>`) +
         `<div class="kpis">
           ${kpi('Giá trị đang mở', fmt.short(open.reduce((a, c) => a + num(c.gia_tri), 0)), open.length + ' cơ hội')}
           ${kpi('Dự báo (theo xác suất)', fmt.short(open.reduce((a, c) => a + num(c.gia_tri) * num(c.xac_suat) / 100, 0)))}
