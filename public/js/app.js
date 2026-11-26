@@ -55,7 +55,7 @@
   function sidebar() {
     const me = App.currentUser();
     return `<aside class="sidebar">
-      <div class="brand"><div class="brand-logo">TL</div>CRM Tiện Lợi</div>
+      <div class="brand"><div class="brand-logo">TL</div>CRM Tiến Lợi</div>
       ${NAV.map(g => `<div class="nav-group"><div class="nav-title">${g.group}</div>
         ${g.items.map(i => `<a class="nav-item ${App.route === i.id ? 'active' : ''}" href="#/${i.id}">${icon(i.icon)}${i.label}${i.count ? `<span class="count">${i.count()}</span>` : ''}</a>`).join('')}</div>`).join('')}
       <div class="sidebar-foot">
