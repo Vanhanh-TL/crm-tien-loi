@@ -647,6 +647,7 @@
           <div class="field search"><label>Tìm khách hàng</label><input class="input" data-filter="q" value="${esc(s.q)}" placeholder="Tên, mã KH…"></div>
           ${isManager(me) || isLeader(me) ? selectHtml('nvkd', 'NVKD phụ trách', uniq(visible.map(k => k.nvkd)), s.nvkd) : ''}
           <div class="field"><label>Hiển thị</label><select class="input" data-filter="loc"><option value="">Tất cả</option><option value="chua" ${s.loc === 'chua' ? 'selected' : ''}>Chưa nhập mục tiêu</option><option value="co" ${s.loc === 'co' ? 'selected' : ''}>Đã nhập mục tiêu</option></select></div>
+          </div>
         <div class="kpis">${MT_GROUPS.map(([g, label]) => `<div class="kpi"><div class="label">${label} · mục tiêu ${nam}</div><div class="value" id="kpi-mt-${g}"></div><div class="hint" id="kpi-hint-${g}"></div></div>`).join('')}
           <div class="kpi"><div class="label">Tổng mục tiêu ${nam}</div><div class="value" id="kpi-mt-all"></div><div class="hint" id="kpi-hint-all"></div></div>
           <div class="kpi"><div class="label">Đã nhập mục tiêu</div><div class="value" id="kpi-done"></div><div class="hint">khách hàng trong danh sách</div></div></div>
