@@ -7,7 +7,7 @@
     { group: 'Tổng quan', items: [{ id: 'tong-quan', label: 'Tổng quan CRM', icon: 'home' }] },
     { group: 'Khách hàng', items: [{ id: 'khach-hang', label: 'Khách hàng', icon: 'users', count: () => D().KhachHang.length }] },
     { group: 'Bán hàng', items: [
-      { id: 'pipeline', label: 'Pipeline bán hàng', icon: 'target', count: () => D().CoHoi.filter(isOpen).length },
+      { id: 'pipeline', label: 'Pipeline', icon: 'target', count: () => D().CoHoi.filter(isOpen).length },
       { id: 'telesale', label: 'Telesale', icon: 'phone', count: () => callbackQueue().length || '' },
     ] },
     { group: 'Thị trường', items: [
