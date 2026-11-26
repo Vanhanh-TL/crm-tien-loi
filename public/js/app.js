@@ -9,6 +9,7 @@
     { group: 'Bán hàng', items: [
       { id: 'pipeline', label: 'Pipeline bán hàng', icon: 'target', count: () => D().CoHoi.filter(isOpen).length },
       { id: 'telesale', label: 'Telesale', icon: 'phone', count: () => callbackQueue().length || '' },
+      { id: 'muc-tieu', label: 'Mục tiêu sản lượng', icon: 'chart' },
     ] },
     { group: 'Thị trường', items: [
       { id: 'thi-truong', label: 'Thu thập thị trường', icon: 'radar' },
@@ -32,6 +33,7 @@
       if (Store.mode === 'login') return renderLogin();
       if (!this.currentUser() && D().NhanVien[0]) try { localStorage.setItem('crm-user', D().NhanVien[0].ten); } catch (e) { }
       window.addEventListener('hashchange', () => this.render());
+      window.addEventListener('beforeunload', e => { if (Targets.dirtyCount()) { e.preventDefault(); e.returnValue = ''; } });
       this.render();
     },
 
@@ -78,7 +80,7 @@
       const ev = el.tagName === 'INPUT' && el.type !== 'month' ? 'input' : 'change';
       el.addEventListener(ev, () => { App.st(App.route)[el.dataset.filter] = el.value; App.render(); });
     });
-    root.querySelector('[data-act="me"]')?.addEventListener('change', e => { try { localStorage.setItem('crm-user', e.target.value); } catch (x) { } });
+    root.querySelector('[data-act="me"]')?.addEventListener('change', e => { try { localStorage.setItem('crm-user', e.target.value); } catch (x) { } App.render(); });
     root.onclick = async e => {
       const el = e.target.closest('[data-act]');
       if (!el || el.tagName === 'SELECT') return;
@@ -574,6 +576,174 @@
   };
 
   /* ========================================================= */
+  /* MỤC TIÊU SẢN LƯỢNG - tấn (theo khách hàng, có phân quyền) */
+  /* Quyền thật được kiểm tra ở Apps Script; phần dưới chỉ để   */
+  /* hiển thị đúng danh sách cho người đang dùng.               */
+  /* ========================================================= */
+  const same = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+  function myStaff() {
+    const list = D().NhanVien.filter(n => n.trang_thai !== 'Nghỉ việc');
+    if (Store.me) return list.find(n => same(n.email, Store.me.email)) || null;
+    return list.find(n => n.ten === App.currentUser()) || null;
+  }
+  const isManager = me => !!me && same(me.vai_tro, 'Quản lý');
+  const isLeader = me => !!me && same(me.vai_tro, 'Trưởng nhóm');
+  const canSeeKh = (me, k) => !!me && (isManager(me) || same(k.nvkd, me.ten) || (isLeader(me) && !!me.nhom_kd && same(k.nhom_kd, me.nhom_kd)));
+
+  const MT_GROUPS = [['mau', 'Mạ màu', 'sl_ma_mau', 'mt_ma_mau'], ['kem', 'Mạ kẽm + Mạ lạnh', 'sl_kem_lanh', 'mt_kem_lanh']];
+  const DV = OPT.dvSanLuong || 'tấn';
+  const fmtDS = v => num(v).toLocaleString('vi-VN', { maximumFractionDigits: 2 }) + ' ' + DV;
+  const growth = (mt, ds) => {
+    mt = num(mt); ds = num(ds);
+    if (!mt) return '<span class="muted">—</span>';
+    if (!ds) return '<span class="badge b-blue">Mới</span>';
+    const p = Math.round((mt / ds - 1) * 100);
+    return `<span class="growth ${p >= 0 ? 'up' : 'down'}">${p >= 0 ? '+' : ''}${p}%</span>`;
+  };
+
+  const Targets = {
+    st() {
+      const s = App.st('muc-tieu', { nam: String(new Date().getFullYear() + 1), nvkd: '', q: '', loc: '', edits: {} });
+      if (s.editsNam !== s.nam) { s.edits = {}; s.editsNam = s.nam; }
+      return s;
+    },
+    dirtyCount() { const s = App.ui['muc-tieu']; return s ? Object.keys(s.edits || {}).length : 0; },
+    /* Giá trị hiện tại của 1 ô: ưu tiên số đang sửa (chưa lưu) */
+    val(r, key) { const e = this.st().edits[r.k.id]; return e && e[key] !== undefined ? UI.parseQty(e[key]) : num(r.t && r.t[key]); },
+    rows(me) {
+      const s = this.st();
+      const T = D().MucTieu;
+      return D().KhachHang.filter(k => canSeeKh(me, k) && (!s.nvkd || k.nvkd === s.nvkd) && search(s.q, k.ten, k.ma_kh))
+        .map(k => ({ k, t: T.find(t => String(t.nam) === s.nam && (String(t.khach_hang_id) === String(k.id) || (t.ma_kh && same(t.ma_kh, k.ma_kh)))) || null }))
+        .filter(r => { const has = this.val(r, 'mt_ma_mau') || this.val(r, 'mt_kem_lanh'); return !s.loc || (s.loc === 'chua' ? !has : has); })
+        .sort((a, b) => (num(b.t?.sl_ma_mau) + num(b.t?.sl_kem_lanh)) - (num(a.t?.sl_ma_mau) + num(a.t?.sl_kem_lanh)) || String(a.k.ten).localeCompare(b.k.ten, 'vi'));
+    },
+    render() {
+      const s = this.st();
+      const me = myStaff();
+      const nam = Number(s.nam), prev = nam - 1;
+      const head0 = head('Bán hàng', `Mục tiêu sản lượng ${nam}`, `So với sản lượng thực hiện ${prev} theo từng khách hàng · đơn vị: ${esc(DV)}`,
+        `<button class="btn" data-act="export">Xuất CSV</button><button class="btn btn-primary" data-act="save" id="mt-save" ${this.dirtyCount() ? '' : 'disabled'}>Lưu mục tiêu${this.dirtyCount() ? ` (${this.dirtyCount()})` : ''}</button>`);
+      this._rows = null;
+      if (!me) return head0 +`<div class="card"><div class="empty">Tài khoản ${Store.me ? `<b>${esc(Store.me.email)}</b>` : 'này'} chưa có trong danh sách <b>Nhân viên</b> nên chưa được giao khách hàng nào.<br>Liên hệ Quản lý để được thêm (đúng email, vai trò, nhóm KD).</div></div>`;
+
+      const rows = this._rows = this.rows(me);
+      const canDs = isManager(me);
+      const visible = D().KhachHang.filter(k => canSeeKh(me, k));
+      const scope = isManager(me) ? 'Quản lý — xem và nhập cho tất cả khách hàng, nhập được cả sản lượng năm trước.'
+        : isLeader(me) ? `Trưởng nhóm — khách hàng của bạn và của ${esc(me.nhom_kd || 'nhóm')}.`
+        : `Khách hàng do <b>${esc(me.ten)}</b> phụ trách.`;
+      const years = [nam - 2, nam - 1, nam, nam + 1].filter((y, i, a) => a.indexOf(y) === i);
+      const cell = (r, key, editable) => {
+        const e = s.edits[r.k.id];
+        const raw = e && e[key] !== undefined ? e[key] : (r.t && r.t[key] !== '' && r.t[key] != null ? num(r.t[key]).toLocaleString('vi-VN', { maximumFractionDigits: 3 }) : '');
+        return editable
+          ? `<input class="input cell ${e && e[key] !== undefined ? 'dirty' : ''}" data-id="${esc(r.k.id)}" data-k="${key}" inputmode="numeric" value="${esc(raw)}" placeholder="Nhập…">`
+          : `<span class="${raw ? '' : 'muted'}">${raw ? esc(fmtDS(num(r.t[key]))) : '—'}</span>`;
+      };
+
+      return head0 + `<div class="kpis">${MT_GROUPS.map(([g, label]) => `<div class="kpi"><div class="label">${label} · mục tiêu ${nam}</div><div class="value" id="kpi-mt-${g}"></div><div class="hint" id="kpi-hint-${g}"></div></div>`).join('')}
+          <div class="kpi"><div class="label">Tổng mục tiêu ${nam}</div><div class="value" id="kpi-mt-all"></div><div class="hint" id="kpi-hint-all"></div></div>
+          <div class="kpi"><div class="label">Đã nhập mục tiêu</div><div class="value" id="kpi-done"></div><div class="hint">khách hàng trong danh sách</div></div></div>
+        <div class="filters">
+          <div class="field"><label>Năm mục tiêu</label><select class="input" data-filter="nam">${years.map(y => `<option value="${y}" ${String(y) === s.nam ? 'selected' : ''}>Năm ${y}</option>`).join('')}</select></div>
+          <div class="field search"><label>Tìm khách hàng</label><input class="input" data-filter="q" value="${esc(s.q)}" placeholder="Tên, mã KH…"></div>
+          ${isManager(me) || isLeader(me) ? selectHtml('nvkd', 'NVKD phụ trách', uniq(visible.map(k => k.nvkd)), s.nvkd) : ''}
+          <div class="field"><label>Hiển thị</label><select class="input" data-filter="loc"><option value="">Tất cả</option><option value="chua" ${s.loc === 'chua' ? 'selected' : ''}>Chưa nhập mục tiêu</option><option value="co" ${s.loc === 'co' ? 'selected' : ''}>Đã nhập mục tiêu</option></select></div>
+        </div>
+        <div class="scope-note">${scope}${canDs ? '' : ` Sản lượng ${prev} do Quản lý cập nhật.`} Gõ số tấn (số lẻ dùng dấu phẩy, vd 12,5) rồi bấm <b>Lưu mục tiêu</b>; Enter để xuống dòng dưới.</div>
+        <div class="table-wrap"><table class="target-table"><thead>
+          <tr><th rowspan="2">Khách hàng</th><th rowspan="2">NVKD</th>${MT_GROUPS.map(([g, label]) => `<th colspan="3" class="grp grp-${g}">${label}</th>`).join('')}<th rowspan="2" class="num">Tổng MT ${nam}</th><th rowspan="2">Ghi chú</th></tr>
+          <tr>${MT_GROUPS.map(([g]) => `<th class="num grp-${g}">SL ${prev}</th><th class="num grp-${g}">MT ${nam}</th><th class="num grp-${g}">±</th>`).join('')}</tr>
+        </thead><tbody>
+        ${rows.map(r => `<tr data-row="${esc(r.k.id)}">
+          <td><div class="name">${esc(r.k.ten)}</div><div class="meta muted small">${esc(r.k.ma_kh)}${r.k.tinh ? ' · ' + esc(r.k.tinh) : ''}</div></td>
+          <td>${staff(r.k.nvkd)}</td>
+          ${MT_GROUPS.map(([g, , ds, mt]) => `<td class="num">${cell(r, ds, canDs)}</td><td class="num">${cell(r, mt, true)}</td><td class="num" data-g="${g}">${growth(this.val(r, mt), this.val(r, ds))}</td>`).join('')}
+          <td class="num" data-total><b>${fmtDS(this.val(r, 'mt_ma_mau') + this.val(r, 'mt_kem_lanh'))}</b></td>
+          <td><input class="input cell note ${s.edits[r.k.id]?.ghi_chu !== undefined ? 'dirty' : ''}" data-id="${esc(r.k.id)}" data-k="ghi_chu" value="${esc(s.edits[r.k.id]?.ghi_chu ?? r.t?.ghi_chu ?? '')}" placeholder="…"></td>
+        </tr>`).join('')}
+        </tbody>${rows.length ? `<tfoot><tr><td colspan="2">Tổng ${rows.length} khách hàng</td>${MT_GROUPS.map(([g, , ds, mt]) => `<td class="num" id="tot-${ds}"></td><td class="num" id="tot-${mt}"></td><td class="num" id="tot-g-${g}"></td>`).join('')}<td class="num" id="tot-all"></td><td></td></tr></tfoot>` : ''}</table>
+        ${rows.length ? '' : `<div class="empty">${visible.length ? 'Không có khách hàng phù hợp bộ lọc.' : 'Bạn chưa được giao khách hàng nào (cột "NVKD phụ trách" ở trang Khách hàng).'}</div>`}</div>`;
+    },
+    mount() {
+      if (!this._rows) return;
+      this.refresh();
+      document.querySelectorAll('.target-table input[data-k]').forEach(inp => {
+        inp.addEventListener('input', () => {
+          const s = this.st();
+          if (inp.dataset.k !== 'ghi_chu') { const t = inp.value.trim(); inp.value = t === '' ? '' : UI.typeQty(t); }
+          (s.edits[inp.dataset.id] = s.edits[inp.dataset.id] || {})[inp.dataset.k] = inp.value;
+          inp.classList.add('dirty');
+          this.refresh(inp.dataset.id);
+        });
+        inp.addEventListener('keydown', e => {
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          const all = [...document.querySelectorAll(`.target-table input[data-k="${inp.dataset.k}"]`)];
+          const next = all[all.indexOf(inp) + 1];
+          if (next) { next.focus(); next.select(); }
+        });
+      });
+    },
+    /* Cập nhật % tăng trưởng, tổng dòng, tổng cột, KPI mà không vẽ lại cả trang (giữ con trỏ khi đang gõ) */
+    refresh(rowId) {
+      const rows = this._rows || [];
+      const $ = id => document.getElementById(id);
+      if (rowId) {
+        const r = rows.find(x => String(x.k.id) === String(rowId));
+        const tr = document.querySelector(`tr[data-row="${CSS.escape(String(rowId))}"]`);
+        if (r && tr) {
+          MT_GROUPS.forEach(([g, , ds, mt]) => { tr.querySelector(`[data-g="${g}"]`).innerHTML = growth(this.val(r, mt), this.val(r, ds)); });
+          tr.querySelector('[data-total]').innerHTML = `<b>${fmtDS(this.val(r, 'mt_ma_mau') + this.val(r, 'mt_kem_lanh'))}</b>`;
+        }
+      }
+      const sum = (key, only) => rows.reduce((a, r) => a + (!only || this.val(r, only) ? this.val(r, key) : 0), 0);
+      // % tăng trưởng chỉ so trên các KH đã nhập mục tiêu (tránh ra số âm khi mới nhập được vài KH)
+      let all = 0, allDs = 0, allDsCmp = 0;
+      MT_GROUPS.forEach(([g, , ds, mt]) => {
+        const d = sum(ds), m = sum(mt), dCmp = sum(ds, mt); all += m; allDs += d; allDsCmp += dCmp;
+        if ($('tot-' + ds)) { $('tot-' + ds).textContent = fmtDS(d); $('tot-' + mt).textContent = fmtDS(m); $('tot-g-' + g).innerHTML = growth(m, dCmp); }
+        $('kpi-mt-' + g).textContent = fmtDS(m);
+        $('kpi-hint-' + g).innerHTML = `SL ${Number(this.st().nam) - 1}: ${fmtDS(d)}${m ? ' · ' + growth(m, dCmp) + ' trên KH đã nhập' : ''}`;
+      });
+      if ($('tot-all')) $('tot-all').innerHTML = `<b>${fmtDS(all)}</b>`;
+      $('kpi-mt-all').textContent = fmtDS(all);
+      $('kpi-hint-all').innerHTML = `SL ${Number(this.st().nam) - 1}: ${fmtDS(allDs)}${all ? ' · ' + growth(all, allDsCmp) + ' trên KH đã nhập' : ''}`;
+      $('kpi-done').textContent = `${rows.filter(r => this.val(r, 'mt_ma_mau') || this.val(r, 'mt_kem_lanh')).length} / ${rows.length}`;
+      const n = this.dirtyCount(), btn = $('mt-save');
+      if (btn && !btn.dataset.busy) { btn.disabled = !n; btn.textContent = 'Lưu mục tiêu' + (n ? ` (${n})` : ''); }
+    },
+    actions: {
+      async save() {
+        const s = Targets.st();
+        const ids = Object.keys(s.edits);
+        if (!ids.length) return;
+        const rows = ids.map(id => {
+          const e = s.edits[id], r = { nam: s.nam, khach_hang_id: id };
+          Object.keys(e).forEach(k => { r[k] = k === 'ghi_chu' ? e[k].trim() : (e[k].trim() === '' ? '' : UI.parseQty(e[k])); });
+          return r;
+        });
+        const btn = document.getElementById('mt-save');
+        btn.disabled = true; btn.dataset.busy = '1'; btn.textContent = `Đang lưu ${rows.length} khách hàng…`;
+        try {
+          const res = await Store.saveTargets(rows);
+          const failed = new Set(res.errors.map(x => String(x.khach_hang_id)));
+          ids.forEach(id => { if (!failed.has(String(id))) delete s.edits[id]; });
+          if (res.errors.length) toast(`Lưu được ${res.saved.length}, lỗi ${res.errors.length}: ${res.errors[0].error}`, true);
+          else toast(`Đã lưu mục tiêu ${res.saved.length} khách hàng`);
+        } catch (err) { toast('Lỗi: ' + err.message, true); }
+        App.render();
+      },
+      export() {
+        const rows = (Targets._rows || []).map(r => ({ nam: Targets.st().nam, ma_kh: r.k.ma_kh, ten_kh: r.k.ten, nvkd: r.k.nvkd, ghi_chu: r.t?.ghi_chu || '',
+          ...Object.fromEntries(['sl_ma_mau', 'mt_ma_mau', 'sl_kem_lanh', 'mt_kem_lanh'].map(k => [k, Targets.val(r, k) || ''])) }));
+        exportCsv(`muc-tieu-${Targets.st().nam}.csv`, ENTITIES.MucTieu.fields, rows);
+      },
+    },
+  };
+
+  /* ========================================================= */
   /* NHÂN VIÊN                                                  */
   /* ========================================================= */
   const Staff = {
@@ -603,7 +773,7 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
-  const VIEWS = { 'tong-quan': Dashboard, 'khach-hang': Customers, pipeline: Pipeline, telesale: Telesale, 'thi-truong': Market, 'ke-hoach': Plan, 'nhan-vien': Staff };
+  const VIEWS = { 'tong-quan': Dashboard, 'khach-hang': Customers, pipeline: Pipeline, telesale: Telesale, 'muc-tieu': Targets, 'thi-truong': Market, 'ke-hoach': Plan, 'nhan-vien': Staff };
   window.App = App;
   App.start();
 })();

@@ -1,7 +1,7 @@
 /* Lớp dữ liệu: chế độ LIVE gọi /api (Cloudflare → Apps Script → Google Sheet),
    chế độ DEMO lưu trong trình duyệt (localStorage) để xem thử khi chưa nối Sheet. */
 (function () {
-  const TABLES = ['KhachHang', 'CoHoi', 'ThiTruong', 'KeHoach', 'Telesale', 'HoatDong', 'NhanVien'];
+  const TABLES = ['KhachHang', 'CoHoi', 'ThiTruong', 'KeHoach', 'Telesale', 'HoatDong', 'NhanVien', 'MucTieu'];
   const LS_KEY = 'crm-demo-v1';
 
   const Store = {
@@ -21,6 +21,7 @@
       let saved = null;
       try { saved = JSON.parse(localStorage.getItem(LS_KEY)); } catch (e) { }
       this.data = saved || seed();
+      if (!this.data.MucTieu || (this.data.MucTieu[0] && !('sl_ma_mau' in this.data.MucTieu[0]))) this.data.MucTieu = seedTargets(this.data.KhachHang);   // dữ liệu demo cũ
       this.persist();
     },
 
@@ -76,6 +77,31 @@
       }
       this.data[table] = this.data[table].filter(r => String(r.id) !== String(id));
       this.persist();
+    },
+
+    /* Lưu nhiều mục tiêu sản lượng một lần (mỗi KH × năm 1 dòng). Trả về { saved, errors } */
+    async saveTargets(rows) {
+      let result;
+      if (this.mode === 'live') {
+        const res = await call({ action: 'save_targets', rows });
+        if (!res.ok) throw new Error(res.error);
+        result = res.data;
+      } else {
+        const now = new Date().toISOString();
+        result = { saved: [], errors: [] };
+        rows.forEach(r => {
+          const kh = this.get('KhachHang', r.khach_hang_id);
+          if (!kh) return result.errors.push({ khach_hang_id: r.khach_hang_id, error: 'Không tìm thấy khách hàng' });
+          const cur = this.data.MucTieu.find(t => String(t.nam) === String(r.nam) && t.khach_hang_id === kh.id);
+          result.saved.push({ ...(cur || { id: uid(), ngay_tao: now }), ...r, ma_kh: kh.ma_kh, ten_kh: kh.ten, nvkd: kh.nvkd, nhom_kd: kh.nhom_kd, nguoi_cap_nhat: App.currentUser(), ngay_cap_nhat: now });
+        });
+      }
+      result.saved.forEach(row => {
+        const i = this.data.MucTieu.findIndex(t => String(t.id) === String(row.id));
+        if (i >= 0) this.data.MucTieu[i] = { ...this.data.MucTieu[i], ...row }; else this.data.MucTieu.push(row);
+      });
+      this.persist();
+      return result;
     },
 
     /* Ghi nhật ký hoạt động (không chặn giao diện nếu lỗi) */
@@ -177,7 +203,21 @@
 
     d.CoHoi.slice(0, 6).forEach((c, i) => d.HoatDong.push({ id: 'hd' + i, thoi_gian: iso(-i), loai: 'Cơ hội', doi_tuong: 'KhachHang', doi_tuong_id: c.khach_hang_id, noi_dung: `Chuyển cơ hội "${c.ten}" sang ${c.giai_doan}`, nguoi_thuc_hien: c.nvkd }));
     d.Telesale.slice(0, 6).forEach((t, i) => d.HoatDong.push({ id: 'hdt' + i, thoi_gian: t.ngay, loai: 'Cuộc gọi', doi_tuong: 'KhachHang', doi_tuong_id: t.khach_hang_id, noi_dung: `Gọi điện: ${t.ket_qua}`, nguoi_thuc_hien: t.nhan_vien }));
+    d.MucTieu = seedTargets(d.KhachHang);
     return d;
+  }
+
+  /* Demo: sản lượng (tấn) năm nay theo KH (năm mục tiêu = năm sau), vài KH đã nhập mục tiêu */
+  function seedTargets(khList) {
+    const nam = String(new Date().getFullYear() + 1);
+    return (khList || []).filter((k, i) => i % 5 !== 4).map((k, i) => {
+      const mau = (i % 4 + 1) * 120 + i * 7.5, kem = (i % 3 + 1) * 180 + i * 11;
+      return {
+        id: 'mt' + i, nam, khach_hang_id: k.id, ma_kh: k.ma_kh, ten_kh: k.ten, nvkd: k.nvkd, nhom_kd: k.nhom_kd,
+        sl_ma_mau: mau, sl_kem_lanh: kem, mt_ma_mau: i % 3 === 0 ? Math.round(mau * 1.15) : '',
+        mt_kem_lanh: i % 3 === 0 ? Math.round(kem * 1.1) : '', ghi_chu: '', nguoi_cap_nhat: k.nvkd,
+      };
+    });
   }
 
   window.Store = Store;

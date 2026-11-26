@@ -12,6 +12,7 @@ window.OPT = {
   trangThaiKeHoach: ['Nháp', 'Đã duyệt', 'Đang thực hiện', 'Hoàn thành'],
   vaiTro: ['Quản lý', 'Trưởng nhóm', 'NVKD', 'Telesale'],
   trangThaiNV: ['Đang làm', 'Nghỉ việc'],
+  dvSanLuong: 'tấn',   // Đơn vị ở trang Mục tiêu sản lượng
   tinh: ['Hà Nội', 'TP Hồ Chí Minh', 'Hải Phòng', 'Đà Nẵng', 'Cần Thơ', 'Huế', 'Bắc Ninh', 'Hưng Yên', 'Quảng Ninh',
     'Thái Nguyên', 'Phú Thọ', 'Ninh Bình', 'Thanh Hóa', 'Nghệ An', 'Hà Tĩnh', 'Quảng Trị', 'Quảng Ngãi', 'Gia Lai',
     'Khánh Hòa', 'Lâm Đồng', 'Đắk Lắk', 'Đồng Nai', 'Tây Ninh', 'Vĩnh Long', 'Đồng Tháp', 'An Giang', 'Cà Mau',
@@ -99,6 +100,20 @@ window.ENTITIES = {
       { key: 'thoi_luong_phut', label: 'Thời lượng (phút)', type: 'number' },
       { key: 'hen_goi_lai', label: 'Hẹn gọi lại', type: 'datetime-local' },
       { key: 'ghi_chu', label: 'Ghi chú', type: 'textarea', full: true },
+    ],
+  },
+  MucTieu: {
+    label: 'Mục tiêu sản lượng', icon: 'chart', title: r => r.ten_kh + ' · ' + r.nam,
+    fields: [
+      { key: 'nam', label: 'Năm mục tiêu' },
+      { key: 'ma_kh', label: 'Mã KH' },
+      { key: 'ten_kh', label: 'Khách hàng' },
+      { key: 'nvkd', label: 'NVKD' },
+      { key: 'sl_ma_mau', label: 'SL năm trước - Mạ màu (tấn)', type: 'number' },
+      { key: 'mt_ma_mau', label: 'Mục tiêu - Mạ màu (tấn)', type: 'number' },
+      { key: 'sl_kem_lanh', label: 'SL năm trước - Mạ kẽm + Mạ lạnh (tấn)', type: 'number' },
+      { key: 'mt_kem_lanh', label: 'Mục tiêu - Mạ kẽm + Mạ lạnh (tấn)', type: 'number' },
+      { key: 'ghi_chu', label: 'Ghi chú' },
     ],
   },
   NhanVien: {

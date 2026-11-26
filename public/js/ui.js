@@ -2,6 +2,18 @@
 (function () {
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const num = v => { const n = Number(String(v ?? '').replace(/[^\d.-]/g, '')); return isFinite(n) ? n : 0; };
+  /* Số tiền người dùng gõ dạng "35.000.000" (dấu chấm = phân cách nghìn) → 35000000 */
+  const parseMoney = v => { const s = String(v ?? '').replace(/[^\d-]/g, ''); return s === '' || s === '-' ? 0 : Number(s); };
+  /* Số lượng (tấn) người dùng gõ kiểu Việt Nam: "1.250,5" → 1250.5 (chấm = nghìn, phẩy = thập phân) */
+  const parseQty = v => { const s = String(v ?? '').replace(/[^\d,-]/g, '').replace(',', '.'); const n = Number(s); return s && isFinite(n) ? n : 0; };
+  /* Định dạng lại khi đang gõ, giữ nguyên phần sau dấu phẩy (tối đa 3 chữ số) */
+  const typeQty = v => {
+    const s = String(v ?? '').replace(/[^\d,]/g, '');
+    if (!s) return '';
+    const [i, ...d] = s.split(',');
+    const int = i === '' ? '0' : Number(i).toLocaleString('vi-VN');
+    return s.includes(',') ? int + ',' + d.join('').slice(0, 3) : int;
+  };
   const pad = n => String(n).padStart(2, '0');
   const toDate = v => { if (!v) return null; const d = new Date(v); return isNaN(d) ? null : d; };
 
@@ -83,6 +95,7 @@
     calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
     user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>',
     menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
+    chart: '<path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
     x: '<path d="M18 6 6 18M6 6l12 12"/>',
   };
@@ -147,7 +160,8 @@
       const el = form.elements[f.key];
       if (!el) return;
       let v = el.value.trim();
-      if (f.type === 'money' || f.type === 'number') v = v === '' ? '' : num(v);
+      if (f.type === 'money') v = v === '' ? '' : parseMoney(v);
+      else if (f.type === 'number') v = v === '' ? '' : num(v);
       out[f.key] = v;
     });
     return out;
@@ -170,7 +184,7 @@
     const m = modal({ title: opts.title || (isNew ? 'Thêm ' : 'Sửa ') + ent.label.toLowerCase(), body, foot });
     const form = m.el.querySelector('form');
     form.querySelectorAll('[data-money]').forEach(i => i.addEventListener('input', () => {
-      const n = num(i.value); i.value = i.value.trim() === '' ? '' : n.toLocaleString('vi-VN');
+      const n = parseMoney(i.value); i.value = i.value.trim() === '' ? '' : n.toLocaleString('vi-VN');
     }));
     m.el.querySelector('[data-cancel]').onclick = m.close;
     const saveBtn = m.el.querySelector('[data-save]');
@@ -209,5 +223,5 @@
     <select class="input" data-filter="${name}"><option value="">${all}</option>${list.map(o => `<option ${o === cur ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></div>`;
   const uniq = arr => [...new Set(arr.filter(Boolean))].sort((a, b) => String(a).localeCompare(b, 'vi'));
 
-  window.UI = { esc, num, fmt, toDate, localInput, monthOptions, nowLocal, today, thisMonth, sameDay, avatar, staff, badge, progress, icon, toast, modal, openForm, selectHtml, uniq, color };
+  window.UI = { esc, num, parseMoney, parseQty, typeQty, fmt, toDate, localInput, monthOptions, nowLocal, today, thisMonth, sameDay, avatar, staff, badge, progress, icon, toast, modal, openForm, selectHtml, uniq, color };
 })();
