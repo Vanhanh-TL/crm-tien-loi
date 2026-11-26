@@ -482,7 +482,7 @@
       const crmNew = nv => D().KhachHang.filter(k => k.nvkd === nv && inMonth(k.ngay_tao, s.thang)).length;
       const crmWon = nv => D().CoHoi.filter(c => c.nvkd === nv && c.giai_doan === 'Thắng' && inMonth(c.ngay_cap_nhat, s.thang)).reduce((a, c) => a + num(c.gia_tri), 0);
       const crmMarket = nv => D().ThiTruong.filter(t => t.nvkd === nv && inMonth(t.ngay, s.thang)).length;
-      return head('Thị trường', 'Kế hoạch thị trường', 'Mục tiêu theo tháng cho từng NVKD / khu vực, so với thực hiện',
+      return head('', 'Kế hoạch thị trường', '',
         `<button class="btn" data-act="copy">Sao chép từ tháng trước</button><button class="btn btn-primary" data-act="new">${icon('plus', 15)} Lập kế hoạch</button>`) +
         `<div class="filters"><div class="field"><label>Tháng</label><input class="input" type="month" data-filter="thang" value="${esc(s.thang)}"></div>
           ${selectHtml('nvkd', 'NVKD', salesNames(), s.nvkd)}</div>
