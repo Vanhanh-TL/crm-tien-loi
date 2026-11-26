@@ -356,7 +356,7 @@
       const logRows = all.filter(t => (!s.day || UI.localInput('date', t.ngay) === s.day) && (!s.nv || t.nhan_vien === s.nv)).sort((a, b) => toDate(b.ngay) - toDate(a.ngay));
       const tabs = [['callback', `Cần gọi lại (${callbackQueue().length})`], ['new', 'Chưa từng gọi'], ['all', 'Tất cả KH']];
 
-      return head('Bán hàng', 'Telesale', 'Chọn khách → gọi → ghi kết quả. Hẹn gọi lại sẽ tự vào hàng đợi.',
+      return head('', 'Telesale', '',
         `<button class="btn btn-primary" data-act="new-call">${icon('plus', 15)} Ghi cuộc gọi</button>`) +
         `<div class="kpis">
           ${kpi('Cuộc gọi hôm nay', todayCalls.length)}
@@ -441,7 +441,7 @@
       const rows = all.filter(t => (!s.loai || t.loai_thong_tin === s.loai) && (!s.tinh || t.tinh === s.tinh) && (!s.nvkd || t.nvkd === s.nvkd) &&
         search(s.q, t.noi_dung, t.doi_thu, t.san_pham, t.khu_vuc)).sort((a, b) => toDate(b.ngay) - toDate(a.ngay));
       const d30 = all.filter(t => toDate(t.ngay) >= Date.now() - 30 * 864e5);
-      return head('Thị trường', 'Thu thập thị trường', 'Thông tin đối thủ, giá bán, nhu cầu, khách hàng mới do NVKD ghi nhận',
+      return head('', 'Thu thập thị trường', '',
         `<button class="btn" data-act="export">Xuất CSV</button><button class="btn btn-primary" data-act="new">${icon('plus', 15)} Ghi nhận thông tin</button>`) +
         `<div class="kpis">${kpi('Tin 30 ngày', d30.length, `${d30.filter(t => t.muc_do === 'Cao').length} quan trọng`)}
           ${['Đối thủ', 'Giá bán', 'Khách hàng mới', 'Nhu cầu thị trường'].map(l => kpi(l, d30.filter(t => t.loai_thong_tin === l).length, '30 ngày', '', 'f-' + OPT.loaiTT.indexOf(l))).join('')}</div>
