@@ -1,9 +1,9 @@
-# CRM Tiện Lợi
+# CRM Tiến Lợi
 
-CRM nội bộ chạy trên **GitHub + Cloudflare Pages**, dữ liệu nằm trong **Google Sheet** (qua Google Apps Script, không cần Google Cloud API key).
+CRM nội bộ chạy trên **GitHub + Cloudflare Workers**, dữ liệu nằm trong **Google Sheet** (qua Google Apps Script, không cần Google Cloud API key).
 
 ```
-Trình duyệt ──► Cloudflare Pages (public/)        giao diện
+Trình duyệt ──► Cloudflare Worker (src/worker.js) giao diện từ public/
                  └─► /api  (functions/api.js)     giấu URL + token
                         └─► Google Apps Script (apps-script/Code.gs)
                                └─► Google Sheet  (mỗi tab = 1 bảng)
@@ -34,7 +34,7 @@ Mở http://localhost:8788. Có thể bấm **Làm mới** ở góc trái dướ
 ## Triển khai thật
 
 ### Bước 1. Tạo Google Sheet + Apps Script
-1. Tạo Google Sheet mới, đặt tên ví dụ `CRM Tiện Lợi - Data`.
+1. Tạo Google Sheet mới, đặt tên ví dụ `CRM Tiến Lợi - Data`.
 2. Menu **Tiện ích mở rộng → Apps Script**. Xóa nội dung mặc định, dán toàn bộ `apps-script/Code.gs`, bấm Lưu.
 3. Biểu tượng bánh răng **Project Settings → Script properties → Add script property**:
    `API_TOKEN` = một chuỗi bí mật dài (ví dụ 32 ký tự ngẫu nhiên). Ghi lại chuỗi này.
@@ -46,16 +46,34 @@ Mở http://localhost:8788. Có thể bấm **Làm mới** ở góc trái dướ
 ### Bước 2. Đưa code lên GitHub
 Tạo repo **private** mới trên GitHub (ví dụ `crm-tien-loi`), rồi đẩy thư mục này lên (bằng GitHub Desktop hoặc git).
 
-### Bước 3. Cloudflare Pages
-1. Đăng nhập https://dash.cloudflare.com → **Workers & Pages → Create → Pages → Connect to Git** → chọn repo.
-2. Build settings: *Framework preset* = **None**, *Build command* = để trống, *Build output directory* = `public`.
-3. **Settings → Variables and Secrets** (Production) thêm:
+### Bước 3. Cloudflare Workers
+1. Đăng nhập https://dash.cloudflare.com → **Workers & Pages → Create application → Import a repository** → chọn repo `crm-tien-loi`.
+2. Màn hình cấu hình:
+   - *Project name* = **`crm-tien-loi`** (phải trùng `name` trong `wrangler.jsonc`)
+   - *Build command* = để trống
+   - *Deploy command* = `npx wrangler deploy` (mặc định)
+   - *Preview command* = `npx wrangler preview` (mặc định)
+   - *Path* = `/`
+   - Bấm **Deploy**. Địa chỉ sẽ dạng `https://crm-tien-loi.<tài-khoản>.workers.dev`.
+3. Vào Worker → **Settings → Variables and Secrets → Add**, chọn loại **Secret** cho cả hai:
    - `APPS_SCRIPT_URL` = Web app URL ở bước 1
-   - `API_TOKEN` = chuỗi bí mật ở bước 1 (chọn loại *Secret*)
-4. Deploy lại. Góc trái dưới giao diện sẽ hiện **Google Sheet** (xanh) thay vì **Chế độ demo**.
+   - `API_TOKEN` = chuỗi bí mật ở bước 1
+4. Tải lại trang. Góc trái dưới giao diện sẽ hiện **Google Sheet** (xanh) thay vì **Chế độ demo**.
 
-### Bước 4. Giới hạn người được truy cập (khuyến nghị)
-**Cloudflare Zero Trust → Access → Applications → Add → Self-hosted**, domain = `<tên>.pages.dev`, policy *Allow* với *Emails ending in* `@tienloigroup.vn`. Nhân viên đăng nhập bằng mã OTP gửi về email. Miễn phí tới 50 người.
+> Thư mục `functions/` vẫn tương thích Cloudflare Pages nếu sau này muốn dùng Pages (build output = `public`).
+
+### Bước 4. Đăng nhập (có sẵn, không cần cấu hình thêm)
+Khi đã nối Google Sheet, CRM yêu cầu đăng nhập bằng **mã 6 số gửi qua email** (gửi từ tài khoản Google sở hữu Sheet, qua Apps Script).
+
+| Ai được vào | Cách cấp quyền |
+|---|---|
+| Email đuôi `@tienloigroup.vn` | Tự động được vào |
+| Email khác (Gmail…) | Thêm 1 dòng vào trang **Nhân viên** (hoặc tab `NhanVien` trong Sheet) có cột **email** |
+| Chặn một người | Đổi trạng thái nhân viên thành **Nghỉ việc** (bị đăng xuất ở lần mở app kế tiếp) |
+
+- Đổi/thêm đuôi email được phép: Script properties → `ALLOWED_DOMAINS` = `tienloigroup.vn,congtykhac.vn`.
+- Phiên đăng nhập giữ 7 ngày. Mã hết hạn sau 10 phút, sai 5 lần phải gửi mã mới.
+- Giới hạn gửi mail của Google: 100 mail/ngày (Gmail cá nhân) hoặc 1.500 mail/ngày (Google Workspace).
 
 ## Sửa / mở rộng
 - Thêm trường dữ liệu: thêm cột vào `SCHEMA` trong `Code.gs` (và cột tương ứng ở dòng 1 của tab trong Sheet), thêm vào `fields` trong `public/js/schema.js`.
