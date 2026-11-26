@@ -5,13 +5,16 @@
   const LS_KEY = 'crm-demo-v1';
 
   const Store = {
-    mode: 'demo',
+    mode: 'demo',   // demo | live | login
+    me: null,       // { email, ten } khi đã đăng nhập
+    loginError: '',
     data: Object.fromEntries(TABLES.map(t => [t, []])),
 
     async init() {
       try {
         const res = await call({ action: 'all' });
-        if (res.ok) { this.mode = 'live'; this.data = { ...this.data, ...res.data }; return; }
+        if (res.ok) { this.mode = 'live'; this.me = res.me || null; this.data = { ...this.data, ...res.data }; return; }
+        if (res.needLogin) { this.mode = 'login'; this.loginError = res.error === 'Chưa đăng nhập' ? '' : res.error; return; }
         console.warn('API chưa sẵn sàng → chạy DEMO:', res.error);
       } catch (e) { console.warn('Không gọi được /api → chạy DEMO'); }
       this.mode = 'demo';
@@ -33,6 +36,10 @@
       const res = await call({ action: 'all' });
       if (res.ok) this.data = { ...this.data, ...res.data };
     },
+
+    requestOtp(email) { return call({ action: 'otp_request', email }); },
+    verifyOtp(email, code) { return call({ action: 'otp_verify', email, code }); },
+    async logout() { await call({ action: 'logout' }); location.reload(); },
 
     get(table, id) { return this.data[table].find(r => String(r.id) === String(id)); },
 
@@ -85,7 +92,10 @@
     const r = await fetch('/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const ct = r.headers.get('content-type') || '';
     if (!ct.includes('json')) return { ok: false, error: 'HTTP ' + r.status };
-    return r.json();
+    const res = await r.json();
+    // Phiên hết hạn giữa chừng → về màn hình đăng nhập
+    if (res.needLogin && body.action !== 'all' && Store.mode === 'live') { alert('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.'); location.reload(); }
+    return res;
   }
 
   function uid() { return Math.random().toString(36).slice(2, 10); }

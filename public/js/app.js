@@ -7,7 +7,7 @@
     { group: 'Tổng quan', items: [{ id: 'tong-quan', label: 'Tổng quan CRM', icon: 'home' }] },
     { group: 'Khách hàng', items: [{ id: 'khach-hang', label: 'Khách hàng', icon: 'users', count: () => D().KhachHang.length }] },
     { group: 'Bán hàng', items: [
-      { id: 'pipeline', label: 'Pipeline', icon: 'target', count: () => D().CoHoi.filter(isOpen).length },
+      { id: 'pipeline', label: 'Pipeline bán hàng', icon: 'target', count: () => D().CoHoi.filter(isOpen).length },
       { id: 'telesale', label: 'Telesale', icon: 'phone', count: () => callbackQueue().length || '' },
     ] },
     { group: 'Thị trường', items: [
@@ -20,12 +20,16 @@
   const App = {
     ui: {},
     route: 'tong-quan',
-    currentUser() { try { return localStorage.getItem('crm-user') || ''; } catch (e) { return ''; } },
+    currentUser() {
+      if (Store.me) return Store.me.ten || Store.me.email;
+      try { return localStorage.getItem('crm-user') || ''; } catch (e) { return ''; }
+    },
     st(view, defaults) { return (this.ui[view] = this.ui[view] || { ...defaults }); },
 
     async start() {
       document.getElementById('app').innerHTML = '<div class="loading">Đang tải dữ liệu…</div>';
       await Store.init();
+      if (Store.mode === 'login') return renderLogin();
       if (!this.currentUser() && D().NhanVien[0]) try { localStorage.setItem('crm-user', D().NhanVien[0].ten); } catch (e) { }
       window.addEventListener('hashchange', () => this.render());
       this.render();
@@ -40,7 +44,7 @@
       const scroll = document.querySelector('.main')?.scrollTop || 0;
 
       document.getElementById('app').innerHTML = `<div class="app">${sidebar()}<div class="main">
-        <div class="topbar-mobile"><button class="btn btn-sm" data-act="menu">${icon('menu')}</button>CRM Tiến Lợi</div>
+        <div class="topbar-mobile"><button class="btn btn-sm" data-act="menu">${icon('menu')}</button>CRM TIẾN LỢI</div>
         <div class="page">${view.render()}</div></div></div>`;
       bindCommon(view);
       view.mount && view.mount();
@@ -55,12 +59,14 @@
   function sidebar() {
     const me = App.currentUser();
     return `<aside class="sidebar">
-      <div class="brand"><div class="brand-logo">TL</div>CRM Tiến Lợi</div>
+      <div class="brand"><div class="brand-logo">TL</div>CRM TIẾN LỢI</div>
       ${NAV.map(g => `<div class="nav-group"><div class="nav-title">${g.group}</div>
         ${g.items.map(i => `<a class="nav-item ${App.route === i.id ? 'active' : ''}" href="#/${i.id}">${icon(i.icon)}${i.label}${i.count ? `<span class="count">${i.count()}</span>` : ''}</a>`).join('')}</div>`).join('')}
       <div class="sidebar-foot">
-        <div class="field" style="min-width:0;margin-bottom:10px"><label>Bạn là</label>
-          <select class="input" data-act="me">${D().NhanVien.map(n => `<option ${n.ten === me ? 'selected' : ''}>${esc(n.ten)}</option>`).join('')}</select></div>
+        ${Store.me ? `<div class="who" style="margin-bottom:10px">${avatar(me)}<div style="min-width:0"><div class="name" style="overflow:hidden;text-overflow:ellipsis">${esc(me)}</div>${Store.me.ten ? `<div class="meta" style="overflow:hidden;text-overflow:ellipsis">${esc(Store.me.email)}</div>` : ''}</div></div>
+          <button class="btn btn-sm" data-act="logout" style="width:100%;justify-content:center;margin-bottom:10px">Đăng xuất</button>` :
+        `<div class="field" style="min-width:0;margin-bottom:10px"><label>Bạn là</label>
+          <select class="input" data-act="me">${D().NhanVien.map(n => `<option ${n.ten === me ? 'selected' : ''}>${esc(n.ten)}</option>`).join('')}</select></div>`}
         <div class="between"><span class="mode-pill ${Store.mode}">${Store.mode === 'live' ? 'Google Sheet' : 'Chế độ demo'}</span>
         ${Store.mode === 'demo' ? '<button class="btn btn-sm btn-ghost" data-act="reset-demo" title="Xóa dữ liệu demo và tạo lại">Làm mới</button>' : '<button class="btn btn-sm btn-ghost" data-act="reload">Tải lại</button>'}</div>
       </div></aside>`;
@@ -80,8 +86,53 @@
       if (act === 'menu') return document.querySelector('.sidebar').classList.toggle('open');
       if (act === 'reset-demo') { if (confirm('Xóa dữ liệu demo đã nhập và tạo lại dữ liệu mẫu?')) Store.resetDemo(); return; }
       if (act === 'reload') { await Store.reload(); App.render(); return toast('Đã tải lại dữ liệu'); }
+      if (act === 'logout') { if (confirm('Đăng xuất khỏi CRM?')) Store.logout(); return; }
       view.actions && view.actions[act] && view.actions[act](el.dataset, e);
     };
+  }
+
+  /* ---------------- Màn hình đăng nhập (OTP qua email) ---------------- */
+  function renderLogin() {
+    const root = document.getElementById('app');
+    let email = '';
+    const step1 = (err = Store.loginError) => {
+      root.innerHTML = `<div class="login-wrap"><form class="login-card" id="lf">
+        <div class="brand" style="padding:0 0 6px"><div class="brand-logo">TL</div>CRM TIẾN LỢI</div>
+        <h2>Đăng nhập</h2><p class="muted small">Nhập email công ty, hệ thống sẽ gửi mã 6 số vào hộp thư của bạn.</p>
+        <div class="field"><label>Email</label><input class="input" id="l-email" type="email" autocomplete="email" placeholder="ten@tienloigroup.vn" value="${esc(email)}" required></div>
+        ${err ? `<div class="login-err">${esc(err)}</div>` : ''}
+        <button class="btn btn-primary" id="l-btn" type="submit">Gửi mã đăng nhập</button></form></div>`;
+      const f = document.getElementById('lf'), btn = document.getElementById('l-btn');
+      document.getElementById('l-email').focus();
+      f.onsubmit = async e => {
+        e.preventDefault();
+        email = document.getElementById('l-email').value.trim().toLowerCase();
+        if (!email) return;
+        btn.disabled = true; btn.textContent = 'Đang gửi mã…';
+        const res = await Store.requestOtp(email).catch(err => ({ ok: false, error: err.message }));
+        res.ok ? step2() : step1(res.error);
+      };
+    };
+    const step2 = (err = '') => {
+      root.innerHTML = `<div class="login-wrap"><form class="login-card" id="lf">
+        <div class="brand" style="padding:0 0 6px"><div class="brand-logo">TL</div>CRM TIẾN LỢI</div>
+        <h2>Nhập mã</h2><p class="muted small">Đã gửi mã tới <b>${esc(email)}</b>. Kiểm tra cả thư mục Spam / Quảng cáo.</p>
+        <div class="field"><label>Mã 6 số</label><input class="input otp" id="l-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required></div>
+        ${err ? `<div class="login-err">${esc(err)}</div>` : ''}
+        <button class="btn btn-primary" id="l-btn" type="submit">Đăng nhập</button>
+        <button class="btn btn-ghost btn-sm" id="l-back" type="button">← Đổi email / gửi lại mã</button></form></div>`;
+      const btn = document.getElementById('l-btn');
+      document.getElementById('l-code').focus();
+      document.getElementById('l-back').onclick = () => step1('');
+      document.getElementById('lf').onsubmit = async e => {
+        e.preventDefault();
+        btn.disabled = true; btn.textContent = 'Đang kiểm tra…';
+        const res = await Store.verifyOtp(email, document.getElementById('l-code').value).catch(err => ({ ok: false, error: err.message }));
+        if (res.ok) { root.innerHTML = '<div class="loading">Đang tải dữ liệu…</div>'; location.reload(); }
+        else step2(res.error);
+      };
+    };
+    step1();
   }
 
   /* ---------------- Hàm tính toán dùng chung ---------------- */
@@ -282,7 +333,8 @@
       const open = deals.filter(isOpen);
       const closed = deals.filter(c => !isOpen(c));
       const winRate = closed.length ? Math.round(closed.filter(c => c.giai_doan === 'Thắng').length / closed.length * 100) : 0;
-      return head('', 'Pipeline','',`<button class="btn btn-primary" data-act="new">${icon('plus', 15)} Thêm cơ hội</button>`) +
+      return head('Bán hàng', 'Pipeline', '',
+        `<button class="btn btn-primary" data-act="new">${icon('plus', 15)} Thêm cơ hội</button>`) +
         `<div class="kpis">
           ${kpi('Giá trị đang mở', fmt.short(open.reduce((a, c) => a + num(c.gia_tri), 0)), open.length + ' cơ hội')}
           ${kpi('Dự báo (theo xác suất)', fmt.short(open.reduce((a, c) => a + num(c.gia_tri) * num(c.xac_suat) / 100, 0)))}
@@ -356,7 +408,7 @@
       const logRows = all.filter(t => (!s.day || UI.localInput('date', t.ngay) === s.day) && (!s.nv || t.nhan_vien === s.nv)).sort((a, b) => toDate(b.ngay) - toDate(a.ngay));
       const tabs = [['callback', `Cần gọi lại (${callbackQueue().length})`], ['new', 'Chưa từng gọi'], ['all', 'Tất cả KH']];
 
-      return head('', 'Telesale', '',
+      return head('Bán hàng', 'Telesale', 'Chọn khách → gọi → ghi kết quả. Hẹn gọi lại sẽ tự vào hàng đợi.',
         `<button class="btn btn-primary" data-act="new-call">${icon('plus', 15)} Ghi cuộc gọi</button>`) +
         `<div class="kpis">
           ${kpi('Cuộc gọi hôm nay', todayCalls.length)}
@@ -441,7 +493,7 @@
       const rows = all.filter(t => (!s.loai || t.loai_thong_tin === s.loai) && (!s.tinh || t.tinh === s.tinh) && (!s.nvkd || t.nvkd === s.nvkd) &&
         search(s.q, t.noi_dung, t.doi_thu, t.san_pham, t.khu_vuc)).sort((a, b) => toDate(b.ngay) - toDate(a.ngay));
       const d30 = all.filter(t => toDate(t.ngay) >= Date.now() - 30 * 864e5);
-      return head('', 'Thu thập thị trường', '',
+      return head('Thị trường', 'Thu thập thị trường', 'Thông tin đối thủ, giá bán, nhu cầu, khách hàng mới do NVKD ghi nhận',
         `<button class="btn" data-act="export">Xuất CSV</button><button class="btn btn-primary" data-act="new">${icon('plus', 15)} Ghi nhận thông tin</button>`) +
         `<div class="kpis">${kpi('Tin 30 ngày', d30.length, `${d30.filter(t => t.muc_do === 'Cao').length} quan trọng`)}
           ${['Đối thủ', 'Giá bán', 'Khách hàng mới', 'Nhu cầu thị trường'].map(l => kpi(l, d30.filter(t => t.loai_thong_tin === l).length, '30 ngày', '', 'f-' + OPT.loaiTT.indexOf(l))).join('')}</div>
@@ -482,7 +534,7 @@
       const crmNew = nv => D().KhachHang.filter(k => k.nvkd === nv && inMonth(k.ngay_tao, s.thang)).length;
       const crmWon = nv => D().CoHoi.filter(c => c.nvkd === nv && c.giai_doan === 'Thắng' && inMonth(c.ngay_cap_nhat, s.thang)).reduce((a, c) => a + num(c.gia_tri), 0);
       const crmMarket = nv => D().ThiTruong.filter(t => t.nvkd === nv && inMonth(t.ngay, s.thang)).length;
-      return head('', 'Kế hoạch thị trường', '',
+      return head('Thị trường', 'Kế hoạch thị trường', 'Mục tiêu theo tháng cho từng NVKD / khu vực, so với thực hiện',
         `<button class="btn" data-act="copy">Sao chép từ tháng trước</button><button class="btn btn-primary" data-act="new">${icon('plus', 15)} Lập kế hoạch</button>`) +
         `<div class="filters"><div class="field"><label>Tháng</label><select class="input" data-filter="thang">${UI.monthOptions(s.thang)}</select></div>
           ${selectHtml('nvkd', 'NVKD', salesNames(), s.nvkd)}</div>
