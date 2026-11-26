@@ -7,7 +7,7 @@
  *   APPS_SCRIPT_URL  = https://script.google.com/macros/s/xxxx/exec
  *   API_TOKEN        = trùng API_TOKEN trong Script properties của Apps Script (cũng dùng để ký cookie)
  */
-const DATA_ACTIONS = new Set(['all', 'list', 'create', 'update', 'delete']);
+const DATA_ACTIONS = new Set(['all', 'list', 'create', 'update', 'delete', 'save_targets']);
 const COOKIE = 'crm_session';
 const SESSION_DAYS = 7;
 
@@ -38,11 +38,12 @@ export async function onRequestPost({ request, env }) {
     // Mỗi lần mở app: kiểm tra lại quyền (phòng khi nhân viên đã bị chuyển "Nghỉ việc")
     const chk = await callScript(env, { action: 'check_user', email: user.e });
     if (!chk.ok) return json({ ok: false, needLogin: true, error: chk.error }, 401, { 'Set-Cookie': clearCookie() });
-    const res = await callScript(env, { action: 'all' });
+    const res = await callScript(env, { action: 'all', user: user.e });
     if (res.ok) res.me = chk.data;
     return json(res);
   }
-  return json(await callScript(env, { action, sheet: body.sheet, id: body.id, data: body.data }));
+  // `user` = email đã đăng nhập (lấy từ cookie đã ký, trình duyệt không giả mạo được) → Apps Script dùng để phân quyền
+  return json(await callScript(env, { action, sheet: body.sheet, id: body.id, data: body.data, rows: body.rows, user: user.e }));
 }
 
 export function onRequestGet() {
