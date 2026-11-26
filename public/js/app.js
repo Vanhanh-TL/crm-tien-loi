@@ -484,7 +484,7 @@
       const crmMarket = nv => D().ThiTruong.filter(t => t.nvkd === nv && inMonth(t.ngay, s.thang)).length;
       return head('', 'Kế hoạch thị trường', '',
         `<button class="btn" data-act="copy">Sao chép từ tháng trước</button><button class="btn btn-primary" data-act="new">${icon('plus', 15)} Lập kế hoạch</button>`) +
-        `<div class="filters"><div class="field"><label>Tháng</label><input class="input" type="month" data-filter="thang" value="${esc(s.thang)}"></div>
+        `<div class="filters"><div class="field"><label>Tháng</label><select class="input" data-filter="thang">${UI.monthOptions(s.thang)}</select></div>
           ${selectHtml('nvkd', 'NVKD', salesNames(), s.nvkd)}</div>
         <div class="kpis">
           ${kpi('Mục tiêu doanh số', fmt.short(sum('muc_tieu_doanh_so')))}
