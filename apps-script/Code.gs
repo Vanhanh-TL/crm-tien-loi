@@ -1,5 +1,5 @@
 /**
- * BACKEND CRM TIỆN LỢI — chạy trên Google Apps Script, dữ liệu nằm trong Google Sheet.
+ * BACKEND CRM TIẾN LỢI — chạy trên Google Apps Script, dữ liệu nằm trong Google Sheet.
  *
  * Cách dùng (chi tiết trong README.md):
  *  1. Tạo Google Sheet mới → Tiện ích mở rộng → Apps Script → dán toàn bộ file này.
@@ -50,6 +50,9 @@ function handle_(params, body) {
   try {
     if (action === 'ping') return json_({ ok: true, data: 'pong' });
     if (action === 'all') return json_({ ok: true, data: readAll_() });
+    if (action === 'otp_request') return json_(otpRequest_(req.email));
+    if (action === 'otp_verify') return json_(otpVerify_(req.email, req.code));
+    if (action === 'check_user') return json_(checkUser_(req.email));
 
     var sheet = req.sheet;
     if (!SCHEMA[sheet]) return json_({ ok: false, error: 'Bảng không tồn tại: ' + sheet });
@@ -74,6 +77,65 @@ function handle_(params, body) {
 
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/* ------------------------------------------------------------------ */
+/* ĐĂNG NHẬP BẰNG MÃ OTP QUA EMAIL                                     */
+/* Được vào: email có đuôi trong ALLOWED_DOMAINS (mặc định             */
+/* tienloigroup.vn) HOẶC email có trong tab NhanVien.                  */
+/* Nhân viên có trạng thái "Nghỉ việc" bị chặn.                        */
+/* ------------------------------------------------------------------ */
+
+function findUser_(email) {
+  email = String(email || '').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: 'Email không hợp lệ' };
+  var staff = readSheet_('NhanVien').filter(function (n) { return String(n.email).trim().toLowerCase() === email; })[0];
+  if (staff && staff.trang_thai === 'Nghỉ việc') return { ok: false, error: 'Tài khoản đã ngừng hoạt động' };
+  var domains = (PropertiesService.getScriptProperties().getProperty('ALLOWED_DOMAINS') || 'tienloigroup.vn')
+    .split(',').map(function (d) { return d.trim().toLowerCase(); }).filter(String);
+  var domainOk = domains.indexOf(email.split('@')[1]) >= 0;
+  if (!staff && !domainOk) return { ok: false, error: 'Email này chưa được cấp quyền. Liên hệ quản trị để được thêm vào danh sách Nhân viên.' };
+  return { ok: true, email: email, ten: staff ? staff.ten : '' };
+}
+
+function checkUser_(email) {
+  var u = findUser_(email);
+  return u.ok ? { ok: true, data: { email: u.email, ten: u.ten } } : u;
+}
+
+function otpRequest_(email) {
+  var u = findUser_(email);
+  if (!u.ok) return u;
+  var cache = CacheService.getScriptCache();
+  if (cache.get('otp_wait:' + u.email)) return { ok: false, error: 'Vừa gửi mã, vui lòng đợi 1 phút rồi thử lại.' };
+  var code = String(Math.floor(100000 + Math.random() * 900000));
+  cache.put('otp:' + u.email, JSON.stringify({ code: code, tries: 0 }), 600);
+  cache.put('otp_wait:' + u.email, '1', 60);
+  MailApp.sendEmail({
+    to: u.email,
+    subject: 'Mã đăng nhập CRM TIẾN LỢI: ' + code,
+    htmlBody: '<p>Xin chào ' + (u.ten || '') + ',</p><p>Mã đăng nhập CRM TIẾN LỢI của bạn là:</p>' +
+      '<p style="font-size:28px;font-weight:700;letter-spacing:4px">' + code + '</p>' +
+      '<p>Mã có hiệu lực 10 phút. Nếu bạn không yêu cầu, hãy bỏ qua email này.</p>'
+  });
+  return { ok: true, data: { email: u.email } };
+}
+
+function otpVerify_(email, code) {
+  email = String(email || '').trim().toLowerCase();
+  var cache = CacheService.getScriptCache();
+  var raw = cache.get('otp:' + email);
+  if (!raw) return { ok: false, error: 'Mã đã hết hạn, vui lòng gửi lại mã mới.' };
+  var st = JSON.parse(raw);
+  st.tries++;
+  if (String(code || '').trim() !== st.code) {
+    if (st.tries >= 5) { cache.remove('otp:' + email); return { ok: false, error: 'Nhập sai quá 5 lần, vui lòng gửi lại mã mới.' }; }
+    cache.put('otp:' + email, JSON.stringify(st), 600);
+    return { ok: false, error: 'Mã không đúng (còn ' + (5 - st.tries) + ' lần thử).' };
+  }
+  cache.remove('otp:' + email);
+  var u = findUser_(email);
+  return u.ok ? { ok: true, data: { email: u.email, ten: u.ten } } : u;
 }
 
 /* ------------------------------------------------------------------ */
@@ -188,5 +250,6 @@ function setupSheets() {
       nhom_kd: 'Nhóm KD1', nvkd: 'Thu Hà', nguoi_lien_he: 'Thu Trang', sdt: '0901000001',
       trang_thai: 'Tiềm năng', diem: 'A', nguon: 'Đi thị trường' });
   }
-  SpreadsheetApp.getUi().alert('Đã tạo xong các tab dữ liệu CRM.');
+  Logger.log('Đã tạo xong các tab dữ liệu CRM.');
+  try { SpreadsheetApp.getUi().alert('Đã tạo xong các tab dữ liệu CRM.'); } catch (e) { /* chạy từ trình soạn thảo: không có UI */ }
 }
