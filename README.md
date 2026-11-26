@@ -17,6 +17,7 @@ Trình duyệt ──► Cloudflare Worker (src/worker.js) giao diện từ publ
 | Khách hàng | Lọc theo NVKD / nhóm KD / tỉnh / trạng thái, cảnh báo thiếu thông tin, hồ sơ chi tiết + hành trình tương tác, xuất CSV |
 | Pipeline bán hàng | Kanban 6 giai đoạn, kéo thả, dự báo theo xác suất, tỷ lệ thắng |
 | Telesale | Hàng đợi "cần gọi lại" / "chưa từng gọi", ghi kết quả 1 chạm, hẹn gọi lại, nhật ký cuộc gọi |
+| Mục tiêu sản lượng | Theo từng khách hàng, đơn vị **tấn**: sản lượng năm trước (Mạ màu; Mạ kẽm + Mạ lạnh) bên cạnh ô nhập mục tiêu năm sau, % tăng trưởng, tổng. **Có phân quyền** (xem dưới) |
 | Thu thập thị trường | NVKD ghi nhận tin đối thủ, giá, nhu cầu, KH mới; thống kê theo tỉnh / người thu thập |
 | Kế hoạch thị trường | Mục tiêu theo tháng × NVKD × khu vực, tiến độ, đối chiếu với số liệu CRM tự đếm, sao chép từ tháng trước |
 | Nhân viên | Danh sách nhân viên dùng cho các ô chọn người phụ trách |
@@ -74,6 +75,22 @@ Khi đã nối Google Sheet, CRM yêu cầu đăng nhập bằng **mã 6 số g�
 - Đổi/thêm đuôi email được phép: Script properties → `ALLOWED_DOMAINS` = `tienloigroup.vn,congtykhac.vn`.
 - Phiên đăng nhập giữ 7 ngày. Mã hết hạn sau 10 phút, sai 5 lần phải gửi mã mới.
 - Giới hạn gửi mail của Google: 100 mail/ngày (Gmail cá nhân) hoặc 1.500 mail/ngày (Google Workspace).
+
+### Bước 5. Phân quyền trang Mục tiêu sản lượng
+Quyền được kiểm tra ở Apps Script theo **email đăng nhập ↔ tab NhanVien** (cột `email`, `ten`, `vai_tro`, `nhom_kd`), và **cột `nvkd` của khách hàng phải trùng đúng `ten` của nhân viên**.
+
+| Vai trò (`vai_tro`) | Thấy / nhập mục tiêu của | Nhập SL năm trước | Sửa danh sách Nhân viên |
+|---|---|---|---|
+| Quản lý | Tất cả khách hàng | ✅ | ✅ |
+| Trưởng nhóm | KH của mình + KH thuộc cùng `nhom_kd` | ❌ | ❌ |
+| NVKD / Telesale | Chỉ KH có NVKD phụ trách = mình | ❌ | ❌ |
+| Email chưa có trong NhanVien | Không thấy gì | ❌ | ❌ |
+
+- **Lần đầu:** khi chưa có ai là "Quản lý", bất kỳ ai cũng sửa được trang Nhân viên → hãy thêm chính mình với vai trò **Quản lý** (đúng email đăng nhập). Từ đó chỉ Quản lý sửa được.
+- Chỉ Quản lý / Trưởng nhóm được đổi "NVKD phụ trách" của khách hàng (tránh NVKD tự chuyển khách về mình).
+- **Sản lượng năm trước (tấn):** Quản lý gõ trực tiếp trên trang, hoặc dán vào tab `MucTieu` trong Sheet: mỗi dòng ghi `nam` (năm mục tiêu, vd `2027`), `ma_kh`, `sl_ma_mau`, `sl_kem_lanh`. Cột `id` điền mã bất kỳ không trùng (vd `mt1`, `mt2`…). Không cần điền `khach_hang_id`, hệ thống tự khớp theo `ma_kh`.
+- Đơn vị: tấn (đổi ở `OPT.dvSanLuong` trong `public/js/schema.js`). Số lẻ gõ bằng dấu phẩy, vd `12,5`; trong Sheet số lưu dạng `12.5`.
+- Các trang khác (Khách hàng, Pipeline…) hiện vẫn cho mọi người đã đăng nhập xem.
 
 ## Sửa / mở rộng
 - Thêm trường dữ liệu: thêm cột vào `SCHEMA` trong `Code.gs` (và cột tương ứng ở dòng 1 của tab trong Sheet), thêm vào `fields` trong `public/js/schema.js`.
