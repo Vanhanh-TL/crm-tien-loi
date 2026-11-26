@@ -40,7 +40,7 @@
       const scroll = document.querySelector('.main')?.scrollTop || 0;
 
       document.getElementById('app').innerHTML = `<div class="app">${sidebar()}<div class="main">
-        <div class="topbar-mobile"><button class="btn btn-sm" data-act="menu">${icon('menu')}</button>CRM Tiện Lợi</div>
+        <div class="topbar-mobile"><button class="btn btn-sm" data-act="menu">${icon('menu')}</button>CRM Tiến Lợi</div>
         <div class="page">${view.render()}</div></div></div>`;
       bindCommon(view);
       view.mount && view.mount();
@@ -282,7 +282,7 @@
       const open = deals.filter(isOpen);
       const closed = deals.filter(c => !isOpen(c));
       const winRate = closed.length ? Math.round(closed.filter(c => c.giai_doan === 'Thắng').length / closed.length * 100) : 0;
-      return head('Bán hàng', 'Pipeline bán hàng', 'Kéo thả thẻ để chuyển giai đoạn',
+      return head('Bán hàng', 'Pipeline',
         `<button class="btn btn-primary" data-act="new">${icon('plus', 15)} Thêm cơ hội</button>`) +
         `<div class="kpis">
           ${kpi('Giá trị đang mở', fmt.short(open.reduce((a, c) => a + num(c.gia_tri), 0)), open.length + ' cơ hội')}
