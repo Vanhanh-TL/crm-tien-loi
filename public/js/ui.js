@@ -37,6 +37,16 @@
     if (type === 'date') return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : ymd;
     return `${ymd}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
+  /* Danh sách tháng dạng "Tháng 11/2026" (12 tháng trước → 6 tháng sau), value = "2026-11" */
+  const monthOptions = cur => {
+    const now = new Date(); const list = [];
+    for (let i = 6; i >= -12; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      list.push(`${d.getFullYear()}-${pad(d.getMonth() + 1)}`);
+    }
+    if (cur && !list.includes(cur)) list.push(cur);
+    return list.map(m => `<option value="${m}" ${m === cur ? 'selected' : ''}>Tháng ${Number(m.slice(5))}/${m.slice(0, 4)}</option>`).join('');
+  };
   const nowLocal = () => localInput('datetime-local', new Date());
   const today = () => localInput('date', new Date());
   const sameDay = (a, b) => { const x = toDate(a), y = toDate(b); return x && y && x.toDateString() === y.toDateString(); };
@@ -124,7 +134,8 @@
       case 'list': return `<input class="input" id="${id}" name="${f.key}" list="dl_${f.key}" value="${esc(v)}" ${req} autocomplete="off"><datalist id="dl_${f.key}">${f.options.map(o => `<option value="${esc(o)}">`).join('')}</datalist>`;
       case 'money': return `<input class="input" id="${id}" name="${f.key}" data-money inputmode="numeric" value="${v === '' ? '' : num(v).toLocaleString('vi-VN')}" ${req}>`;
       case 'number': return `<input class="input" type="number" id="${id}" name="${f.key}" value="${esc(v)}" ${req}>`;
-      case 'date': case 'datetime-local': case 'month':
+      case 'month': return `<select class="input" id="${id}" name="${f.key}" ${req}>${monthOptions(localInput('month', v))}</select>`;
+      case 'date': case 'datetime-local':
         return `<input class="input" type="${t}" id="${id}" name="${f.key}" value="${esc(localInput(t, v))}" ${req}>`;
       default: return `<input class="input" type="${t}" id="${id}" name="${f.key}" value="${esc(v)}" placeholder="${esc(f.placeholder || '')}" ${req}>`;
     }
@@ -198,5 +209,5 @@
     <select class="input" data-filter="${name}"><option value="">${all}</option>${list.map(o => `<option ${o === cur ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></div>`;
   const uniq = arr => [...new Set(arr.filter(Boolean))].sort((a, b) => String(a).localeCompare(b, 'vi'));
 
-  window.UI = { esc, num, fmt, toDate, localInput, nowLocal, today, thisMonth, sameDay, avatar, staff, badge, progress, icon, toast, modal, openForm, selectHtml, uniq, color };
+  window.UI = { esc, num, fmt, toDate, localInput, monthOptions, nowLocal, today, thisMonth, sameDay, avatar, staff, badge, progress, icon, toast, modal, openForm, selectHtml, uniq, color };
 })();
