@@ -1,7 +1,7 @@
 /* Lớp dữ liệu: chế độ LIVE gọi /api (Cloudflare → Apps Script → Google Sheet),
    chế độ DEMO lưu trong trình duyệt (localStorage) để xem thử khi chưa nối Sheet. */
 (function () {
-  const TABLES = ['KhachHang', 'CoHoi', 'ThiTruong', 'KeHoach', 'Telesale', 'HoatDong', 'NhanVien', 'MucTieu'];
+  const TABLES = ['KhachHang', 'CoHoi', 'ThiTruong', 'KeHoach', 'Telesale', 'HoatDong', 'NhanVien', 'MucTieu', 'SKU', 'MucTieuSKU'];
   const LS_KEY = 'crm-demo-v1';
 
   const Store = {
@@ -22,6 +22,7 @@
       try { saved = JSON.parse(localStorage.getItem(LS_KEY)); } catch (e) { }
       this.data = saved || seed();
       if (!this.data.MucTieu || (this.data.MucTieu[0] && !('sl_ma_mau' in this.data.MucTieu[0]))) this.data.MucTieu = seedTargets(this.data.KhachHang);   // dữ liệu demo cũ
+      if (!this.data.SKU) { this.data.SKU = seedSku(); this.data.MucTieuSKU = seedSkuTargets(this.data.MucTieu); }
       this.persist();
     },
 
@@ -104,6 +105,31 @@
       return result;
     },
 
+    /**
+     * Lưu mục tiêu theo SKU của khách hàng: rows [{ nam, khach_hang_id, ma_sku, mt, sl_nam_truoc?, xoa? }].
+     * Máy chủ tự cộng mục tiêu SKU lên mục tiêu nhóm (Mạ màu / Mạ kẽm + Mạ lạnh). Trả về { saved, deleted, errors, targets }
+     */
+    async saveSkuTargets(rows) {
+      let result;
+      if (this.mode === 'live') {
+        const res = await call({ action: 'save_sku_targets', rows });
+        if (!res.ok) throw new Error(res.error);
+        result = res.data;
+      } else result = demoSaveSku(this, rows);
+      const T = this.data.MucTieuSKU;
+      this.data.MucTieuSKU = T.filter(x => !result.deleted.includes(x.id));
+      result.saved.forEach(row => {
+        const i = this.data.MucTieuSKU.findIndex(t => String(t.id) === String(row.id));
+        if (i >= 0) this.data.MucTieuSKU[i] = { ...this.data.MucTieuSKU[i], ...row }; else this.data.MucTieuSKU.push(row);
+      });
+      result.targets.forEach(row => {
+        const i = this.data.MucTieu.findIndex(t => String(t.id) === String(row.id));
+        if (i >= 0) this.data.MucTieu[i] = { ...this.data.MucTieu[i], ...row }; else this.data.MucTieu.push(row);
+      });
+      this.persist();
+      return result;
+    },
+
     /* Ghi nhật ký hoạt động (không chặn giao diện nếu lỗi) */
     log(loai, doi_tuong, doi_tuong_id, noi_dung, nguoi) {
       return this.create('HoatDong', {
@@ -121,6 +147,43 @@
     const res = await r.json();
     // Phiên hết hạn giữa chừng → về màn hình đăng nhập
     if (res.needLogin && body.action !== 'all' && Store.mode === 'live') { alert('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.'); location.reload(); }
+    return res;
+  }
+
+  /* Bản demo (không có máy chủ) của save_sku_targets — cùng quy tắc với Apps Script */
+  function demoSaveSku(store, rows) {
+    const now = new Date().toISOString(), who = App.currentUser();
+    const res = { saved: [], deleted: [], errors: [], targets: [] };
+    let list = store.data.MucTieuSKU.map(x => ({ ...x }));
+    const touched = new Set();
+    rows.forEach(r => {
+      const kh = store.get('KhachHang', r.khach_hang_id);
+      const sku = store.data.SKU.find(s => s.ma_sku === r.ma_sku);
+      const cur = list.find(x => String(x.nam) === String(r.nam) && x.khach_hang_id === r.khach_hang_id && x.ma_sku === r.ma_sku);
+      if (!kh || (!sku && !cur)) return res.errors.push({ ...r, error: !kh ? 'Không tìm thấy khách hàng' : 'Mã SKU không có trong danh mục' });
+      touched.add(kh.id);
+      if (r.xoa) {
+        if (!cur) return;
+        list = list.filter(x => x.id !== cur.id); res.deleted.push(cur.id);
+        return;
+      }
+      const row = { ...(cur || { id: uid(), ngay_tao: now }), nam: String(r.nam), khach_hang_id: kh.id, ma_kh: kh.ma_kh, ten_kh: kh.ten, nvkd: kh.nvkd, nhom_kd: kh.nhom_kd,
+        ma_sku: r.ma_sku, ten_sku: sku ? sku.ten_sku : cur.ten_sku, nhom_sp: sku ? sku.nhom : cur.nhom_sp, nguoi_cap_nhat: who, ngay_cap_nhat: now };
+      ['mt', 'sl_nam_truoc', 'ghi_chu'].forEach(k => { if (r[k] !== undefined) row[k] = r[k]; });
+      if (cur) Object.assign(cur, row); else list.push(row);
+      res.saved.push(row);
+    });
+    touched.forEach(khId => {
+      const nam = String(rows[0].nam), sums = {};
+      list.filter(x => x.khach_hang_id === khId && String(x.nam) === nam && Number(x.mt) > 0).forEach(x => {
+        const g = /màu/i.test(x.nhom_sp) ? 'mt_ma_mau' : 'mt_kem_lanh'; sums[g] = (sums[g] || 0) + Number(x.mt);
+      });
+      if (!Object.keys(sums).length) return;
+      const kh = store.get('KhachHang', khId);
+      const cur = store.data.MucTieu.find(t => String(t.nam) === nam && t.khach_hang_id === khId);
+      Object.keys(sums).forEach(g => { sums[g] = Math.round(sums[g] * 1000) / 1000; });
+      res.targets.push({ ...(cur || { id: uid(), ngay_tao: now, nam, khach_hang_id: khId, ma_kh: kh.ma_kh, ten_kh: kh.ten, nvkd: kh.nvkd, nhom_kd: kh.nhom_kd }), ...sums, ngay_cap_nhat: now });
+    });
     return res;
   }
 
@@ -204,7 +267,41 @@
     d.CoHoi.slice(0, 6).forEach((c, i) => d.HoatDong.push({ id: 'hd' + i, thoi_gian: iso(-i), loai: 'Cơ hội', doi_tuong: 'KhachHang', doi_tuong_id: c.khach_hang_id, noi_dung: `Chuyển cơ hội "${c.ten}" sang ${c.giai_doan}`, nguoi_thuc_hien: c.nvkd }));
     d.Telesale.slice(0, 6).forEach((t, i) => d.HoatDong.push({ id: 'hdt' + i, thoi_gian: t.ngay, loai: 'Cuộc gọi', doi_tuong: 'KhachHang', doi_tuong_id: t.khach_hang_id, noi_dung: `Gọi điện: ${t.ket_qua}`, nguoi_thuc_hien: t.nhan_vien }));
     d.MucTieu = seedTargets(d.KhachHang);
+    d.SKU = seedSku();
+    d.MucTieuSKU = seedSkuTargets(d.MucTieu);
     return d;
+  }
+
+  function seedSku() {
+    return [
+      ['MM-035-1070', 'Tôn mạ màu 0.35mm khổ 1070', 'Mạ màu', 'AZ50 · 0.35 x 1070'],
+      ['MM-040-1200', 'Tôn mạ màu 0.40mm khổ 1200', 'Mạ màu', 'AZ70 · 0.40 x 1200'],
+      ['MM-045-1200', 'Tôn mạ màu 0.45mm khổ 1200', 'Mạ màu', 'AZ70 · 0.45 x 1200'],
+      ['MK-050-1200', 'Tôn mạ kẽm 0.50mm khổ 1200', 'Mạ kẽm', 'Z80 · 0.50 x 1200'],
+      ['MK-100-1219', 'Tôn mạ kẽm 1.00mm khổ 1219', 'Mạ kẽm', 'Z120 · 1.00 x 1219'],
+      ['ML-040-1200', 'Tôn mạ lạnh 0.40mm khổ 1200', 'Mạ lạnh', 'AZ100 · 0.40 x 1200'],
+      ['ML-045-1200', 'Tôn mạ lạnh 0.45mm khổ 1200', 'Mạ lạnh', 'AZ100 · 0.45 x 1200'],
+      ['ML-050-1219', 'Tôn mạ lạnh 0.50mm khổ 1219', 'Mạ lạnh', 'AZ150 · 0.50 x 1219'],
+    ].map(([ma_sku, ten_sku, nhom, quy_cach], i) => ({ id: 'sku' + i, ma_sku, ten_sku, nhom, quy_cach, trang_thai: 'Đang bán', ghi_chu: '' }));
+  }
+
+  /* Demo: tách SL năm trước của mỗi KH ra 2 SKU mạ màu + 2 SKU kẽm/lạnh; KH đầu tiên đã đặt mục tiêu theo SKU */
+  function seedSkuTargets(targets) {
+    const out = [];
+    const r1 = v => Math.round(v * 10) / 10;
+    targets.slice(0, 12).forEach((t, i) => {
+      const parts = [['MM-045-1200', 'Tôn mạ màu 0.45mm khổ 1200', 'Mạ màu', r1(t.sl_ma_mau * 0.6)], ['MM-040-1200', 'Tôn mạ màu 0.40mm khổ 1200', 'Mạ màu', r1(t.sl_ma_mau * 0.4)],
+        ['MK-050-1200', 'Tôn mạ kẽm 0.50mm khổ 1200', 'Mạ kẽm', r1(t.sl_kem_lanh * 0.5)], ['ML-045-1200', 'Tôn mạ lạnh 0.45mm khổ 1200', 'Mạ lạnh', r1(t.sl_kem_lanh * 0.5)]];
+      parts.forEach(([ma_sku, ten_sku, nhom_sp, sl], j) => out.push({
+        id: `mts${i}_${j}`, nam: t.nam, khach_hang_id: t.khach_hang_id, ma_kh: t.ma_kh, ten_kh: t.ten_kh, nvkd: t.nvkd, nhom_kd: t.nhom_kd,
+        ma_sku, ten_sku, nhom_sp, sl_nam_truoc: sl, mt: i === 0 ? Math.round(sl * 1.12) : '', ghi_chu: '', nguoi_cap_nhat: t.nvkd,
+      }));
+      if (i === 0) {
+        const sum = g => out.filter(x => x.khach_hang_id === t.khach_hang_id && (g === 'mau') === /màu/i.test(x.nhom_sp)).reduce((a, x) => a + (Number(x.mt) || 0), 0);
+        t.mt_ma_mau = sum('mau'); t.mt_kem_lanh = sum('kem');
+      }
+    });
+    return out;
   }
 
   /* Demo: sản lượng (tấn) năm nay theo KH (năm mục tiêu = năm sau), vài KH đã nhập mục tiêu */

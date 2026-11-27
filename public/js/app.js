@@ -4,18 +4,18 @@
   const D = () => Store.data;
 
   const NAV = [
-    { group: 'Tổng quan', items: [{ id: 'tong-quan', label: 'Tổng quan', icon: 'home' }] },
+    { group: 'Tổng quan', items: [{ id: 'tong-quan', label: 'Tổng quan CRM', icon: 'home' }] },
     { group: 'Khách hàng', items: [{ id: 'khach-hang', label: 'Khách hàng', icon: 'users', count: () => D().KhachHang.length }] },
     { group: 'Bán hàng', items: [
-      { id: 'muc-tieu', label: 'Mục tiêu', icon: 'chart' },
-      { id: 'pipeline', label: 'Pipeline', icon: 'target', count: () => D().CoHoi.filter(isOpen).length },
-      { id: 'telesale', label: 'Telesale', icon: 'phone', count: () => callbackQueue().length || '' },      
+      { id: 'muc-tieu', label: 'Mục tiêu sản lượng', icon: 'chart' },
+      { id: 'pipeline', label: 'Pipeline bán hàng', icon: 'target', count: () => D().CoHoi.filter(isOpen).length },
+      { id: 'telesale', label: 'Telesale', icon: 'phone', count: () => callbackQueue().length || '' },
     ] },
     { group: 'Thị trường', items: [
       { id: 'thi-truong', label: 'Thu thập thị trường', icon: 'radar' },
       { id: 'ke-hoach', label: 'Kế hoạch thị trường', icon: 'calendar' },
     ] },
-    { group: 'Thiết lập', items: [{ id: 'nhan-vien', label: 'Nhân viên', icon: 'user' }] },
+    { group: 'Thiết lập', items: [{ id: 'nhan-vien', label: 'Nhân viên', icon: 'user' }, { id: 'sku', label: 'Danh mục SKU', icon: 'box' }] },
   ];
 
   const App = {
@@ -593,6 +593,8 @@
   const MT_GROUPS = [['mau', 'Mạ màu', 'sl_ma_mau', 'mt_ma_mau'], ['kem', 'Mạ kẽm + Mạ lạnh', 'sl_kem_lanh', 'mt_kem_lanh']];
   const DV = OPT.dvSanLuong || 'tấn';
   const fmtDS = v => num(v).toLocaleString('vi-VN', { maximumFractionDigits: 2 }) + ' ' + DV;
+  const qtyInput = v => (v === '' || v == null ? '' : num(v).toLocaleString('vi-VN', { maximumFractionDigits: 3 }));
+  const groupOf = nhom => (/màu/i.test(String(nhom || '')) ? 'mau' : 'kem');
   const growth = (mt, ds) => {
     mt = num(mt); ds = num(ds);
     if (!mt) return '<span class="muted">—</span>';
@@ -600,72 +602,97 @@
     const p = Math.round((mt / ds - 1) * 100);
     return `<span class="growth ${p >= 0 ? 'up' : 'down'}">${p >= 0 ? '+' : ''}${p}%</span>`;
   };
+  /* Các dòng mục tiêu SKU của 1 KH trong năm (khớp theo id hoặc mã KH) */
+  const skuRowsOf = (k, nam) => D().MucTieuSKU.filter(x => String(x.nam) === String(nam) &&
+    (String(x.khach_hang_id) === String(k.id) || (x.ma_kh && same(x.ma_kh, k.ma_kh))));
 
   const Targets = {
     st() {
-      const s = App.st('muc-tieu', { nam: String(new Date().getFullYear() + 1), nvkd: '', q: '', loc: '', edits: {} });
+      const s = App.st('muc-tieu', { nam: String(new Date().getFullYear() + 1), nvkd: '', q: '', loc: '', edits: {}, collapsed: {} });
       if (s.editsNam !== s.nam) { s.edits = {}; s.editsNam = s.nam; }
       return s;
     },
     dirtyCount() { const s = App.ui['muc-tieu']; return s ? Object.keys(s.edits || {}).length : 0; },
-    /* Giá trị hiện tại của 1 ô: ưu tiên số đang sửa (chưa lưu) */
-    val(r, key) { const e = this.st().edits[r.k.id]; return e && e[key] !== undefined ? UI.parseQty(e[key]) : num(r.t && r.t[key]); },
+    /* Giá trị 1 ô. MT nhóm = tổng MT theo SKU nếu KH đã đặt mục tiêu SKU cho nhóm đó; còn lại ưu tiên số đang sửa */
+    val(r, key) {
+      const g = MT_GROUPS.find(x => x[3] === key);
+      if (g && r.skuMt[g[0]] !== null) return r.skuMt[g[0]];
+      const e = this.st().edits[r.k.id];
+      return e && e[key] !== undefined ? UI.parseQty(e[key]) : num(r.t && r.t[key]);
+    },
     rows(me) {
       const s = this.st();
       const T = D().MucTieu;
       return D().KhachHang.filter(k => canSeeKh(me, k) && (!s.nvkd || k.nvkd === s.nvkd) && search(s.q, k.ten, k.ma_kh))
-        .map(k => ({ k, t: T.find(t => String(t.nam) === s.nam && (String(t.khach_hang_id) === String(k.id) || (t.ma_kh && same(t.ma_kh, k.ma_kh)))) || null }))
+        .map(k => {
+          const skus = skuRowsOf(k, s.nam);
+          const skuMt = { mau: null, kem: null };
+          skus.forEach(x => { if (num(x.mt) > 0) { const g = groupOf(x.nhom_sp); skuMt[g] = (skuMt[g] || 0) + num(x.mt); } });
+          return { k, skus, skuMt, nReg: skus.filter(x => num(x.mt) > 0).length,
+            t: T.find(t => String(t.nam) === s.nam && (String(t.khach_hang_id) === String(k.id) || (t.ma_kh && same(t.ma_kh, k.ma_kh)))) || null };
+        })
         .filter(r => { const has = this.val(r, 'mt_ma_mau') || this.val(r, 'mt_kem_lanh'); return !s.loc || (s.loc === 'chua' ? !has : has); })
-        .sort((a, b) => (num(b.t?.sl_ma_mau) + num(b.t?.sl_kem_lanh)) - (num(a.t?.sl_ma_mau) + num(a.t?.sl_kem_lanh)) || String(a.k.ten).localeCompare(b.k.ten, 'vi'));
+        .sort((a, b) => String(a.k.nvkd || '').localeCompare(String(b.k.nvkd || ''), 'vi') ||
+          (num(b.t?.sl_ma_mau) + num(b.t?.sl_kem_lanh)) - (num(a.t?.sl_ma_mau) + num(a.t?.sl_kem_lanh)) || String(a.k.ten).localeCompare(b.k.ten, 'vi'));
     },
     render() {
       const s = this.st();
       const me = myStaff();
       const nam = Number(s.nam), prev = nam - 1;
       const head0 = head('Bán hàng', `Mục tiêu sản lượng ${nam}`, `So với sản lượng thực hiện ${prev} theo từng khách hàng · đơn vị: ${esc(DV)}`,
-        `<button class="btn" data-act="export">Xuất CSV</button><button class="btn btn-primary" data-act="save" id="mt-save" ${this.dirtyCount() ? '' : 'disabled'}>Lưu mục tiêu${this.dirtyCount() ? ` (${this.dirtyCount()})` : ''}</button>`);
+        `<button class="btn" data-act="export">Xuất CSV</button><button class="btn" data-act="export-sku">CSV theo SKU</button><button class="btn btn-primary" data-act="save" id="mt-save" ${this.dirtyCount() ? '' : 'disabled'}>Lưu mục tiêu${this.dirtyCount() ? ` (${this.dirtyCount()})` : ''}</button>`);
       this._rows = null;
-      if (!me) return head0 +`<div class="card"><div class="empty">Tài khoản ${Store.me ? `<b>${esc(Store.me.email)}</b>` : 'này'} chưa có trong danh sách <b>Nhân viên</b> nên chưa được giao khách hàng nào.<br>Liên hệ Quản lý để được thêm (đúng email, vai trò, nhóm KD).</div></div>`;
+      if (!me) return head0 + `<div class="card"><div class="empty">Tài khoản ${Store.me ? `<b>${esc(Store.me.email)}</b>` : 'này'} chưa có trong danh sách <b>Nhân viên</b> nên chưa được giao khách hàng nào.<br>Liên hệ Quản lý để được thêm (đúng email, vai trò, nhóm KD).</div></div>`;
 
       const rows = this._rows = this.rows(me);
+      const groups = this._groups = uniq(rows.map(r => r.k.nvkd || '(Chưa giao NVKD)')).map(name => ({ name, rows: rows.filter(r => (r.k.nvkd || '(Chưa giao NVKD)') === name) }));
       const canDs = isManager(me);
       const visible = D().KhachHang.filter(k => canSeeKh(me, k));
       const scope = isManager(me) ? 'Quản lý — xem và nhập cho tất cả khách hàng, nhập được cả sản lượng năm trước.'
         : isLeader(me) ? `Trưởng nhóm — khách hàng của bạn và của ${esc(me.nhom_kd || 'nhóm')}.`
         : `Khách hàng do <b>${esc(me.ten)}</b> phụ trách.`;
       const years = [nam - 2, nam - 1, nam, nam + 1].filter((y, i, a) => a.indexOf(y) === i);
+      const NCOL = 10;
       const cell = (r, key, editable) => {
+        const g = MT_GROUPS.find(x => x[3] === key);
+        if (g && r.skuMt[g[0]] !== null) return `<span class="sku-locked" data-act="sku" data-id="${esc(r.k.id)}" title="Tổng mục tiêu các SKU ${esc(g[1])}. Sửa trong Mục tiêu SKU."><b>${esc(fmtDS(r.skuMt[g[0]]))}</b><span class="tag">SKU</span></span>`;
         const e = s.edits[r.k.id];
-        const raw = e && e[key] !== undefined ? e[key] : (r.t && r.t[key] !== '' && r.t[key] != null ? num(r.t[key]).toLocaleString('vi-VN', { maximumFractionDigits: 3 }) : '');
+        const raw = e && e[key] !== undefined ? e[key] : (r.t && r.t[key] !== '' && r.t[key] != null ? qtyInput(r.t[key]) : '');
         return editable
-          ? `<input class="input cell ${e && e[key] !== undefined ? 'dirty' : ''}" data-id="${esc(r.k.id)}" data-k="${key}" inputmode="numeric" value="${esc(raw)}" placeholder="Nhập…">`
+          ? `<input class="input cell ${e && e[key] !== undefined ? 'dirty' : ''}" data-id="${esc(r.k.id)}" data-k="${key}" inputmode="decimal" value="${esc(raw)}" placeholder="Nhập…">`
           : `<span class="${raw ? '' : 'muted'}">${raw ? esc(fmtDS(num(r.t[key]))) : '—'}</span>`;
       };
+      const skuCell = r => `<div class="sku-cell">
+          ${r.skus.length ? `<button class="sku-chip ${r.nReg ? '' : 'empty'}" data-act="sku" data-id="${esc(r.k.id)}" title="Xem danh sách SKU">${r.nReg ? `${r.nReg} SKU` : 'Chưa đặt'}</button>` : ''}
+          <button class="btn btn-sm sku-add" data-act="sku-add" data-id="${esc(r.k.id)}" title="Thêm mục tiêu theo SKU">${icon('plus', 14)}</button></div>`;
+      const totalCells = (pfx) => `${MT_GROUPS.map(([g, , ds, mt]) => `<td class="num" id="${pfx}-${ds}"></td><td class="num" id="${pfx}-${mt}"></td><td class="num" id="${pfx}-g-${g}"></td>`).join('')}<td class="num" id="${pfx}-sku"></td><td class="num" id="${pfx}-all"></td><td></td>`;
 
       return head0 + `<div class="filters">
           <div class="field"><label>Năm mục tiêu</label><select class="input" data-filter="nam">${years.map(y => `<option value="${y}" ${String(y) === s.nam ? 'selected' : ''}>Năm ${y}</option>`).join('')}</select></div>
           <div class="field search"><label>Tìm khách hàng</label><input class="input" data-filter="q" value="${esc(s.q)}" placeholder="Tên, mã KH…"></div>
           ${isManager(me) || isLeader(me) ? selectHtml('nvkd', 'NVKD phụ trách', uniq(visible.map(k => k.nvkd)), s.nvkd) : ''}
           <div class="field"><label>Hiển thị</label><select class="input" data-filter="loc"><option value="">Tất cả</option><option value="chua" ${s.loc === 'chua' ? 'selected' : ''}>Chưa nhập mục tiêu</option><option value="co" ${s.loc === 'co' ? 'selected' : ''}>Đã nhập mục tiêu</option></select></div>
-          </div>
+        </div>
         <div class="kpis">${MT_GROUPS.map(([g, label]) => `<div class="kpi"><div class="label">${label} · mục tiêu ${nam}</div><div class="value" id="kpi-mt-${g}"></div><div class="hint" id="kpi-hint-${g}"></div></div>`).join('')}
           <div class="kpi"><div class="label">Tổng mục tiêu ${nam}</div><div class="value" id="kpi-mt-all"></div><div class="hint" id="kpi-hint-all"></div></div>
-          <div class="kpi"><div class="label">Đã nhập mục tiêu</div><div class="value" id="kpi-done"></div><div class="hint">khách hàng trong danh sách</div></div></div>
-        </div>
-        <div class="scope-note">${scope}${canDs ? '' : ` Sản lượng ${prev} do Quản lý cập nhật.`} Gõ số tấn (số lẻ dùng dấu phẩy, vd 12,5) rồi bấm <b>Lưu mục tiêu</b>; Enter để xuống dòng dưới.</div>
+          <div class="kpi"><div class="label">Đã nhập mục tiêu</div><div class="value" id="kpi-done"></div><div class="hint" id="kpi-done-hint"></div></div></div>
+        <div class="scope-note">${scope}${canDs ? '' : ` Sản lượng ${prev} do Quản lý cập nhật.`} Gõ số tấn (số lẻ dùng dấu phẩy, vd 12,5) rồi bấm <b>Lưu mục tiêu</b>. Bấm <b>+</b> ở cột <b>Mục tiêu SKU</b> để đặt mục tiêu chi tiết theo SKU — khi đó MT nhóm tự bằng tổng các SKU.</div>
         <div class="table-wrap"><table class="target-table"><thead>
-          <tr><th rowspan="2">Khách hàng</th><th rowspan="2">NVKD</th>${MT_GROUPS.map(([g, label]) => `<th colspan="3" class="grp grp-${g}">${label}</th>`).join('')}<th rowspan="2" class="num">Tổng MT ${nam}</th><th rowspan="2">Ghi chú</th></tr>
+          <tr><th rowspan="2">Khách hàng</th>${MT_GROUPS.map(([g, label]) => `<th colspan="3" class="grp grp-${g}">${label}</th>`).join('')}<th rowspan="2">Mục tiêu SKU</th><th rowspan="2" class="num">Tổng MT ${nam}</th><th rowspan="2">Ghi chú</th></tr>
           <tr>${MT_GROUPS.map(([g]) => `<th class="num grp-${g}">SL ${prev}</th><th class="num grp-${g}">MT ${nam}</th><th class="num grp-${g}">±</th>`).join('')}</tr>
-        </thead><tbody>
-        ${rows.map(r => `<tr data-row="${esc(r.k.id)}">
-          <td><div class="name">${esc(r.k.ten)}</div><div class="meta muted small">${esc(r.k.ma_kh)}${r.k.tinh ? ' · ' + esc(r.k.tinh) : ''}</div></td>
-          <td>${staff(r.k.nvkd)}</td>
-          ${MT_GROUPS.map(([g, , ds, mt]) => `<td class="num">${cell(r, ds, canDs)}</td><td class="num">${cell(r, mt, true)}</td><td class="num" data-g="${g}">${growth(this.val(r, mt), this.val(r, ds))}</td>`).join('')}
-          <td class="num" data-total><b>${fmtDS(this.val(r, 'mt_ma_mau') + this.val(r, 'mt_kem_lanh'))}</b></td>
-          <td><input class="input cell note ${s.edits[r.k.id]?.ghi_chu !== undefined ? 'dirty' : ''}" data-id="${esc(r.k.id)}" data-k="ghi_chu" value="${esc(s.edits[r.k.id]?.ghi_chu ?? r.t?.ghi_chu ?? '')}" placeholder="…"></td>
-        </tr>`).join('')}
-        </tbody>${rows.length ? `<tfoot><tr><td colspan="2">Tổng ${rows.length} khách hàng</td>${MT_GROUPS.map(([g, , ds, mt]) => `<td class="num" id="tot-${ds}"></td><td class="num" id="tot-${mt}"></td><td class="num" id="tot-g-${g}"></td>`).join('')}<td class="num" id="tot-all"></td><td></td></tr></tfoot>` : ''}</table>
-        ${rows.length ? '' : `<div class="empty">${visible.length ? 'Không có khách hàng phù hợp bộ lọc.' : 'Bạn chưa được giao khách hàng nào (cột "NVKD phụ trách" ở trang Khách hàng).'}</div>`}</div>`;
+        </thead>
+        ${groups.map((G, gi) => { const closed = !!s.collapsed[G.name]; return `<tbody class="nv-group">
+          <tr class="nv-row" data-act="toggle-nv" data-nv="${esc(G.name)}"><td><span class="chev ${closed ? 'closed' : ''}">${icon('chevron', 14)}</span>${staff(G.name)}<span class="muted small" style="margin-left:6px">${G.rows.length} KH</span></td>${totalCells('g' + gi)}</tr>
+          ${closed ? '' : G.rows.map(r => `<tr data-row="${esc(r.k.id)}">
+            <td><div class="name">${esc(r.k.ten)}</div><div class="meta muted small">${esc(r.k.ma_kh)}${r.k.tinh ? ' · ' + esc(r.k.tinh) : ''}</div></td>
+            ${MT_GROUPS.map(([g, , ds, mt]) => `<td class="num">${cell(r, ds, canDs)}</td><td class="num">${cell(r, mt, true)}</td><td class="num" data-g="${g}">${growth(this.val(r, mt), this.val(r, ds))}</td>`).join('')}
+            <td>${skuCell(r)}</td>
+            <td class="num" data-total><b>${fmtDS(this.val(r, 'mt_ma_mau') + this.val(r, 'mt_kem_lanh'))}</b></td>
+            <td><input class="input cell note ${s.edits[r.k.id]?.ghi_chu !== undefined ? 'dirty' : ''}" data-id="${esc(r.k.id)}" data-k="ghi_chu" value="${esc(s.edits[r.k.id]?.ghi_chu ?? r.t?.ghi_chu ?? '')}" placeholder="…"></td>
+          </tr>`).join('')}</tbody>`; }).join('')}
+        ${rows.length ? `<tfoot><tr><td>Tổng ${rows.length} khách hàng</td>${totalCells('tot')}</tr></tfoot>` : ''}</table>
+        ${rows.length ? '' : `<div class="empty">${visible.length ? 'Không có khách hàng phù hợp bộ lọc.' : 'Bạn chưa được giao khách hàng nào (cột "NVKD phụ trách" ở trang Khách hàng).'}</div>`}</div>
+        <span hidden data-ncol="${NCOL}"></span>`;
     },
     mount() {
       if (!this._rows) return;
@@ -687,10 +714,11 @@
         });
       });
     },
-    /* Cập nhật % tăng trưởng, tổng dòng, tổng cột, KPI mà không vẽ lại cả trang (giữ con trỏ khi đang gõ) */
+    /* Cập nhật % tăng trưởng, tổng dòng, tổng theo NVKD, tổng chung, KPI mà không vẽ lại cả trang (giữ con trỏ khi đang gõ) */
     refresh(rowId) {
       const rows = this._rows || [];
       const $ = id => document.getElementById(id);
+      const prev = Number(this.st().nam) - 1;
       if (rowId) {
         const r = rows.find(x => String(x.k.id) === String(rowId));
         const tr = document.querySelector(`tr[data-row="${CSS.escape(String(rowId))}"]`);
@@ -699,19 +727,30 @@
           tr.querySelector('[data-total]').innerHTML = `<b>${fmtDS(this.val(r, 'mt_ma_mau') + this.val(r, 'mt_kem_lanh'))}</b>`;
         }
       }
-      const sum = (key, only) => rows.reduce((a, r) => a + (!only || this.val(r, only) ? this.val(r, key) : 0), 0);
       // % tăng trưởng chỉ so trên các KH đã nhập mục tiêu (tránh ra số âm khi mới nhập được vài KH)
-      let all = 0, allDs = 0, allDsCmp = 0;
-      MT_GROUPS.forEach(([g, , ds, mt]) => {
-        const d = sum(ds), m = sum(mt), dCmp = sum(ds, mt); all += m; allDs += d; allDsCmp += dCmp;
-        if ($('tot-' + ds)) { $('tot-' + ds).textContent = fmtDS(d); $('tot-' + mt).textContent = fmtDS(m); $('tot-g-' + g).innerHTML = growth(m, dCmp); }
-        $('kpi-mt-' + g).textContent = fmtDS(m);
-        $('kpi-hint-' + g).innerHTML = `SL ${Number(this.st().nam) - 1}: ${fmtDS(d)}${m ? ' · ' + growth(m, dCmp) + ' trên KH đã nhập' : ''}`;
+      const totals = (list, pfx) => {
+        const sum = (key, only) => list.reduce((a, r) => a + (!only || this.val(r, only) ? this.val(r, key) : 0), 0);
+        const out = { all: 0, allDs: 0, allCmp: 0, g: {} };
+        MT_GROUPS.forEach(([g, , ds, mt]) => {
+          const d = sum(ds), m = sum(mt), c = sum(ds, mt);
+          out.g[g] = { d, m, c }; out.all += m; out.allDs += d; out.allCmp += c;
+          if ($(`${pfx}-${ds}`)) { $(`${pfx}-${ds}`).textContent = fmtDS(d); $(`${pfx}-${mt}`).textContent = fmtDS(m); $(`${pfx}-g-${g}`).innerHTML = growth(m, c); }
+        });
+        const nSku = list.reduce((a, r) => a + r.nReg, 0);
+        if ($(`${pfx}-sku`)) $(`${pfx}-sku`).innerHTML = nSku ? `<span class="muted small">${nSku} SKU</span>` : '';
+        if ($(`${pfx}-all`)) $(`${pfx}-all`).innerHTML = `<b>${fmtDS(out.all)}</b>`;
+        return out;
+      };
+      (this._groups || []).forEach((G, gi) => totals(G.rows, 'g' + gi));
+      const T = totals(rows, 'tot');
+      MT_GROUPS.forEach(([g]) => {
+        $('kpi-mt-' + g).textContent = fmtDS(T.g[g].m);
+        $('kpi-hint-' + g).innerHTML = `SL ${prev}: ${fmtDS(T.g[g].d)}${T.g[g].m ? ' · ' + growth(T.g[g].m, T.g[g].c) + ' trên KH đã nhập' : ''}`;
       });
-      if ($('tot-all')) $('tot-all').innerHTML = `<b>${fmtDS(all)}</b>`;
-      $('kpi-mt-all').textContent = fmtDS(all);
-      $('kpi-hint-all').innerHTML = `SL ${Number(this.st().nam) - 1}: ${fmtDS(allDs)}${all ? ' · ' + growth(all, allDsCmp) + ' trên KH đã nhập' : ''}`;
+      $('kpi-mt-all').textContent = fmtDS(T.all);
+      $('kpi-hint-all').innerHTML = `SL ${prev}: ${fmtDS(T.allDs)}${T.all ? ' · ' + growth(T.all, T.allCmp) + ' trên KH đã nhập' : ''}`;
       $('kpi-done').textContent = `${rows.filter(r => this.val(r, 'mt_ma_mau') || this.val(r, 'mt_kem_lanh')).length} / ${rows.length}`;
+      $('kpi-done-hint').textContent = `khách hàng · ${rows.filter(r => r.nReg).length} KH có mục tiêu theo SKU`;
       const n = this.dirtyCount(), btn = $('mt-save');
       if (btn && !btn.dataset.busy) { btn.disabled = !n; btn.textContent = 'Lưu mục tiêu' + (n ? ` (${n})` : ''); }
     },
@@ -736,11 +775,180 @@
         } catch (err) { toast('Lỗi: ' + err.message, true); }
         App.render();
       },
+      sku(ds) { openSkuTargets(ds.id, false); },
+      'sku-add'(ds) { openSkuTargets(ds.id, true); },
+      'toggle-nv'(ds) { const s = Targets.st(); s.collapsed[ds.nv] = !s.collapsed[ds.nv]; App.render(); },
       export() {
         const rows = (Targets._rows || []).map(r => ({ nam: Targets.st().nam, ma_kh: r.k.ma_kh, ten_kh: r.k.ten, nvkd: r.k.nvkd, ghi_chu: r.t?.ghi_chu || '',
           ...Object.fromEntries(['sl_ma_mau', 'mt_ma_mau', 'sl_kem_lanh', 'mt_kem_lanh'].map(k => [k, Targets.val(r, k) || ''])) }));
         exportCsv(`muc-tieu-${Targets.st().nam}.csv`, ENTITIES.MucTieu.fields, rows);
       },
+      'export-sku'() {
+        const rows = (Targets._rows || []).flatMap(r => r.skus.map(x => ({ ...x, ten_kh: r.k.ten, ma_kh: r.k.ma_kh, nvkd: r.k.nvkd })));
+        exportCsv(`muc-tieu-sku-${Targets.st().nam}.csv`, ENTITIES.MucTieuSKU.fields, rows);
+      },
+    },
+  };
+
+  /* ---------- Popup: mục tiêu theo SKU của 1 khách hàng ---------- */
+  function openSkuTargets(khId, focusAdd) {
+    const k = Store.get('KhachHang', khId);
+    if (!k) return;
+    const me = myStaff(), canSl = isManager(me);
+    const nam = Targets.st().nam, prev = Number(nam) - 1;
+    const skuInfo = ma => D().SKU.find(x => same(x.ma_sku, ma));
+    let items = skuRowsOf(k, nam).map(x => ({ ma_sku: x.ma_sku, ten_sku: x.ten_sku, nhom_sp: x.nhom_sp, sl: qtyInput(x.sl_nam_truoc), mt: qtyInput(x.mt), isNew: false, xoa: false, changed: false }));
+    const order = list => list.slice().sort((a, b) => (UI.parseQty(b.mt) > 0) - (UI.parseQty(a.mt) > 0) || String(a.nhom_sp).localeCompare(b.nhom_sp, 'vi') || String(a.ma_sku).localeCompare(b.ma_sku));
+    items = order(items);
+    const changes = () => items.filter(i => i.changed || i.xoa || (i.isNew && (UI.parseQty(i.mt) || UI.parseQty(i.sl)))).length;
+
+    const m = UI.modal({
+      title: `Mục tiêu theo SKU · ${k.ten}`, wide: true,
+      body: `<div class="muted small" style="margin-bottom:10px">${esc(k.ma_kh)} · NVKD ${esc(k.nvkd || '—')} · Năm mục tiêu ${nam} · đơn vị ${esc(DV)}${canSl ? '' : ` · SL ${prev} do Quản lý cập nhật`}</div>
+        <div class="row sku-pick-row"><input class="input" id="sku-pick" list="sku-dl" placeholder="Gõ mã hoặc tên SKU trong danh mục…" autocomplete="off"><datalist id="sku-dl"></datalist>
+          <button class="btn btn-dark" data-sk="add">${icon('plus', 14)} Thêm SKU</button></div>
+        <div id="sku-body"></div>`,
+      foot: `<a href="#/sku" class="small">Danh mục SKU →</a><div class="row"><button class="btn" data-sk="cancel">Đóng</button><button class="btn btn-primary" data-sk="save">Lưu</button></div>`,
+    });
+    const $ = sel => m.el.querySelector(sel);
+
+    const draw = () => {
+      const used = new Set(items.filter(i => !i.xoa).map(i => i.ma_sku));
+      $('#sku-dl').innerHTML = D().SKU.filter(x => x.trang_thai !== 'Ngừng bán' && !used.has(x.ma_sku))
+        .map(x => `<option value="${esc(x.ma_sku)} — ${esc(x.ten_sku)}">${esc(x.nhom)}</option>`).join('');
+      const live = items.filter(i => !i.xoa);
+      const reg = live.filter(i => UI.parseQty(i.mt) > 0 || i.isNew), rest = live.filter(i => !(UI.parseQty(i.mt) > 0 || i.isNew));
+      const row = i => {
+        const idx = items.indexOf(i), info = skuInfo(i.ma_sku);
+        return `<tr data-i="${idx}">
+          <td><div class="name">${esc(i.ma_sku)}</div><div class="meta muted small">${esc(i.ten_sku || info?.ten_sku || '')}${info?.quy_cach ? ' · ' + esc(info.quy_cach) : ''}</div></td>
+          <td><span class="badge ${groupOf(i.nhom_sp) === 'mau' ? 'b-purple' : 'b-blue'}">${esc(i.nhom_sp)}</span></td>
+          <td class="num">${canSl ? `<input class="input cell" data-f="sl" inputmode="decimal" value="${esc(i.sl)}" placeholder="—">` : `<span class="${i.sl ? '' : 'muted'}">${i.sl ? esc(i.sl) + ' ' + esc(DV) : '—'}</span>`}</td>
+          <td class="num"><input class="input cell ${i.changed || i.isNew ? 'dirty' : ''}" data-f="mt" inputmode="decimal" value="${esc(i.mt)}" placeholder="Nhập…"></td>
+          <td class="num" data-gr>${growth(UI.parseQty(i.mt), UI.parseQty(i.sl))}</td>
+          <td><button class="btn btn-sm btn-ghost" data-sk="del" title="Bỏ SKU này">${icon('x', 14)}</button></td></tr>`;
+      };
+      $('#sku-body').innerHTML = `<div class="table-wrap"><table class="target-table sku-table"><thead><tr><th>SKU</th><th>Nhóm</th><th class="num">SL ${prev}</th><th class="num">MT ${nam}</th><th class="num">±</th><th></th></tr></thead>
+        <tbody>${reg.length ? reg.map(row).join('') : `<tr><td colspan="6" class="muted small">Chưa có SKU nào đăng ký mục tiêu. Chọn SKU ở ô phía trên rồi bấm <b>Thêm SKU</b>.</td></tr>`}</tbody>
+        ${rest.length ? `<tbody><tr class="nv-row"><td colspan="6">Có sản lượng ${prev}, chưa đặt mục tiêu (${rest.length})</td></tr>${rest.map(row).join('')}</tbody>` : ''}
+        <tfoot id="sku-sum"></tfoot></table></div>`;
+      sum();
+    };
+    const sum = () => {
+      const live = items.filter(i => !i.xoa);
+      $('#sku-sum').innerHTML = MT_GROUPS.map(([g, label]) => {
+        const L = live.filter(i => groupOf(i.nhom_sp) === g);
+        const sl = L.reduce((a, i) => a + UI.parseQty(i.sl), 0), mt = L.reduce((a, i) => a + UI.parseQty(i.mt), 0);
+        const slCmp = L.filter(i => UI.parseQty(i.mt) > 0).reduce((a, i) => a + UI.parseQty(i.sl), 0);
+        return `<tr><td colspan="2">${label}</td><td class="num">${fmtDS(sl)}</td><td class="num">${fmtDS(mt)}</td><td class="num">${growth(mt, slCmp)}</td><td></td></tr>`;
+      }).join('');
+      const n = changes(), btn = $('[data-sk="save"]');
+      btn.disabled = !n; btn.textContent = n ? `Lưu (${n} thay đổi)` : 'Lưu';
+    };
+    const addSku = () => {
+      const v = $('#sku-pick').value.trim();
+      if (!v) return $('#sku-pick').focus();
+      const code = v.split(' — ')[0].trim();
+      const info = D().SKU.find(x => same(x.ma_sku, code)) || D().SKU.find(x => same(x.ten_sku, v));
+      if (!info) return toast('Không tìm thấy SKU "' + v + '" trong danh mục', true);
+      if (info.trang_thai === 'Ngừng bán') return toast('SKU này đã ngừng bán', true);
+      let it = items.find(i => same(i.ma_sku, info.ma_sku));
+      if (it) { it.xoa = false; }
+      else { it = { ma_sku: info.ma_sku, ten_sku: info.ten_sku, nhom_sp: info.nhom, sl: '', mt: '', isNew: true, xoa: false, changed: false }; items.push(it); }
+      if (!UI.parseQty(it.mt)) it.isNew = true;   // đưa lên nhóm "đăng ký mục tiêu" để nhập
+      $('#sku-pick').value = '';
+      draw();
+      const inp = m.el.querySelector(`tr[data-i="${items.indexOf(it)}"] input[data-f="mt"]`);
+      if (inp) { inp.focus(); inp.select(); }
+    };
+
+    m.el.addEventListener('click', async e => {
+      const b = e.target.closest('[data-sk]');
+      if (!b) return;
+      const act = b.dataset.sk;
+      if (act === 'cancel') { if (!changes() || confirm('Đóng và bỏ các thay đổi chưa lưu?')) m.close(); return; }
+      if (act === 'add') return addSku();
+      if (act === 'del') {
+        const i = items[Number(b.closest('tr').dataset.i)];
+        if (i.isNew && !i.changed && !UI.parseQty(i.sl)) items.splice(items.indexOf(i), 1);
+        else if (canSl || !UI.parseQty(i.sl)) i.xoa = true;          // xóa hẳn dòng
+        else { i.mt = ''; i.changed = true; i.isNew = false; }     // NVKD: còn SL năm trước → chỉ bỏ mục tiêu
+        return draw();
+      }
+      if (act === 'save') {
+        const rows = items.filter(i => i.changed || i.xoa || (i.isNew && (UI.parseQty(i.mt) || UI.parseQty(i.sl)))).map(i => {
+          const r = { nam, khach_hang_id: k.id, ma_sku: i.ma_sku };
+          if (i.xoa) r.xoa = true;
+          else { r.mt = i.mt.trim() === '' ? '' : UI.parseQty(i.mt); if (canSl) r.sl_nam_truoc = i.sl.trim() === '' ? '' : UI.parseQty(i.sl); }
+          return r;
+        });
+        if (!rows.length) return m.close();
+        b.disabled = true; b.textContent = 'Đang lưu…';
+        try {
+          const res = await Store.saveSkuTargets(rows);
+          if (res.errors.length) toast(`Lỗi ${res.errors.length} SKU: ${res.errors[0].error}`, true);
+          else toast(`Đã lưu mục tiêu SKU cho ${k.ten}`);
+          m.close(); App.render();
+        } catch (err) { toast('Lỗi: ' + err.message, true); b.disabled = false; sum(); }
+      }
+    });
+    m.el.addEventListener('input', e => {
+      const inp = e.target.closest('input[data-f]');
+      if (!inp) return;
+      const i = items[Number(inp.closest('tr').dataset.i)];
+      const t = inp.value.trim(); inp.value = t === '' ? '' : UI.typeQty(t);
+      i[inp.dataset.f] = inp.value; i.changed = true; inp.classList.add('dirty');
+      inp.closest('tr').querySelector('[data-gr]').innerHTML = growth(UI.parseQty(i.mt), UI.parseQty(i.sl));
+      sum();
+    });
+    m.el.addEventListener('keydown', e => {
+      if (e.key !== 'Enter') return;
+      if (e.target.id === 'sku-pick') { e.preventDefault(); return addSku(); }
+      const inp = e.target.closest('input[data-f]');
+      if (!inp) return;
+      e.preventDefault();
+      const all = [...m.el.querySelectorAll(`input[data-f="${inp.dataset.f}"]`)];
+      const next = all[all.indexOf(inp) + 1];
+      if (next) { next.focus(); next.select(); }
+    });
+    $('#sku-pick').addEventListener('change', () => { if ($('#sku-pick').value.includes(' — ')) addSku(); });
+    draw();
+    setTimeout(() => { const f = focusAdd ? $('#sku-pick') : m.el.querySelector('input[data-f="mt"]') || $('#sku-pick'); f && f.focus(); }, 30);
+  }
+
+  /* ========================================================= */
+  /* DANH MỤC SKU                                               */
+  /* ========================================================= */
+  const SkuCatalog = {
+    render() {
+      const s = App.st('sku', { q: '', nhom: '', tt: '' });
+      const me = myStaff(), canEdit = isManager(me) || Store.mode === 'demo';
+      const all = D().SKU;
+      const rows = all.filter(x => (!s.nhom || x.nhom === s.nhom) && (!s.tt || x.trang_thai === s.tt) && search(s.q, x.ma_sku, x.ten_sku, x.quy_cach))
+        .sort((a, b) => String(a.nhom).localeCompare(b.nhom, 'vi') || String(a.ma_sku).localeCompare(b.ma_sku));
+      const used = ma => uniq(D().MucTieuSKU.filter(x => same(x.ma_sku, ma) && num(x.mt) > 0).map(x => x.khach_hang_id || x.ma_kh)).length;
+      return head('Thiết lập', 'Danh mục SKU', 'Dùng để đặt mục tiêu sản lượng theo SKU. Nhóm "Mạ màu" cộng vào MT mạ màu, "Mạ kẽm"/"Mạ lạnh" cộng vào MT mạ kẽm + mạ lạnh.',
+        canEdit ? `<button class="btn btn-primary" data-act="new">${icon('plus', 15)} Thêm SKU</button>` : '') +
+        `<div class="filters">
+          <div class="field search"><label>Tìm SKU</label><input class="input" data-filter="q" value="${esc(s.q)}" placeholder="Mã, tên, quy cách…"></div>
+          ${selectHtml('nhom', 'Nhóm sản phẩm', OPT.nhomSP, s.nhom)}
+          ${selectHtml('tt', 'Trạng thái', OPT.trangThaiSKU, s.tt)}
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>Mã SKU</th><th>Tên SKU</th><th>Nhóm</th><th>Quy cách</th><th class="num">KH có mục tiêu</th><th>Trạng thái</th></tr></thead><tbody>
+          ${rows.map(x => `<tr class="${canEdit ? 'clickable' : ''}" ${canEdit ? `data-act="edit" data-id="${esc(x.id)}"` : ''}><td><b>${esc(x.ma_sku)}</b></td><td>${esc(x.ten_sku)}</td>
+            <td><span class="badge ${groupOf(x.nhom) === 'mau' ? 'b-purple' : 'b-blue'}">${esc(x.nhom)}</span></td><td class="muted">${esc(x.quy_cach)}</td>
+            <td class="num">${used(x.ma_sku) || '<span class="muted">0</span>'}</td><td>${x.trang_thai === 'Ngừng bán' ? '<span class="badge b-red">Ngừng bán</span>' : '<span class="badge b-green">Đang bán</span>'}</td></tr>`).join('')}
+        </tbody></table>${rows.length ? '' : `<div class="empty">${all.length ? 'Không có SKU phù hợp.' : 'Chưa có SKU. ' + (canEdit ? 'Bấm "Thêm SKU", hoặc dán danh sách vào tab SKU trong Google Sheet (cột id, ma_sku, ten_sku, nhom, quy_cach, trang_thai).' : 'Liên hệ Quản lý để thêm.')}</div>`}</div>
+        ${canEdit ? '' : '<p class="small muted mt">Chỉ Quản lý được thêm / sửa danh mục SKU.</p>'}`;
+    },
+    actions: {
+      new() {
+        openForm('SKU', null, {
+          defaults: { trang_thai: 'Đang bán' },
+          beforeSave(d) { if (D().SKU.some(x => same(x.ma_sku, d.ma_sku))) throw new Error('Mã SKU đã tồn tại'); },
+        });
+      },
+      edit(ds) { openForm('SKU', Store.get('SKU', ds.id)); },
     },
   };
 
@@ -774,7 +982,7 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
-  const VIEWS = { 'tong-quan': Dashboard, 'khach-hang': Customers, pipeline: Pipeline, telesale: Telesale, 'muc-tieu': Targets, 'thi-truong': Market, 'ke-hoach': Plan, 'nhan-vien': Staff };
+  const VIEWS = { 'tong-quan': Dashboard, 'khach-hang': Customers, pipeline: Pipeline, telesale: Telesale, 'muc-tieu': Targets, 'thi-truong': Market, 'ke-hoach': Plan, 'nhan-vien': Staff, sku: SkuCatalog };
   window.App = App;
   App.start();
 })();

@@ -96,6 +96,8 @@
     user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>',
     menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
     chart: '<path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/>',
+    box: '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/>',
+    chevron: '<path d="m6 9 6 6 6-6"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
     x: '<path d="M18 6 6 18M6 6l12 12"/>',
   };
@@ -194,9 +196,9 @@
       const miss = fields.filter(f => f.required && (data[f.key] === '' || data[f.key] == null));
       if (miss.length) { toast('Vui lòng nhập: ' + miss.map(f => f.label).join(', '), true); form.elements[miss[0].key].focus(); return; }
       if (data.khach_hang_id) { const kh = Store.get('KhachHang', data.khach_hang_id); if (kh) data.ten_kh = kh.ten; }
-      if (opts.beforeSave) opts.beforeSave(data, isNew);
       saveBtn.disabled = true; saveBtn.textContent = 'Đang lưu…';
       try {
+        if (opts.beforeSave) opts.beforeSave(data, isNew);
         const row = isNew ? await Store.create(table, { ...(opts.defaults || {}), ...data }) : await Store.update(table, record.id, data);
         m.close();
         toast(isNew ? 'Đã tạo mới' : 'Đã lưu');

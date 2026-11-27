@@ -13,6 +13,8 @@ window.OPT = {
   vaiTro: ['Quản lý', 'Trưởng nhóm', 'NVKD', 'Telesale'],
   trangThaiNV: ['Đang làm', 'Nghỉ việc'],
   dvSanLuong: 'tấn',   // Đơn vị ở trang Mục tiêu sản lượng
+  nhomSP: ['Mạ màu', 'Mạ kẽm', 'Mạ lạnh'],   // nhóm SKU: "Mạ màu" cộng vào MT mạ màu, còn lại cộng vào MT mạ kẽm + mạ lạnh
+  trangThaiSKU: ['Đang bán', 'Ngừng bán'],
   tinh: ['Hà Nội', 'TP Hồ Chí Minh', 'Hải Phòng', 'Đà Nẵng', 'Cần Thơ', 'Huế', 'Bắc Ninh', 'Hưng Yên', 'Quảng Ninh',
     'Thái Nguyên', 'Phú Thọ', 'Ninh Bình', 'Thanh Hóa', 'Nghệ An', 'Hà Tĩnh', 'Quảng Trị', 'Quảng Ngãi', 'Gia Lai',
     'Khánh Hòa', 'Lâm Đồng', 'Đắk Lắk', 'Đồng Nai', 'Tây Ninh', 'Vĩnh Long', 'Đồng Tháp', 'An Giang', 'Cà Mau',
@@ -114,6 +116,31 @@ window.ENTITIES = {
       { key: 'sl_kem_lanh', label: 'SL năm trước - Mạ kẽm + Mạ lạnh (tấn)', type: 'number' },
       { key: 'mt_kem_lanh', label: 'Mục tiêu - Mạ kẽm + Mạ lạnh (tấn)', type: 'number' },
       { key: 'ghi_chu', label: 'Ghi chú' },
+    ],
+  },
+  SKU: {
+    label: 'SKU', icon: 'box', title: r => r.ma_sku,
+    fields: [
+      { key: 'ma_sku', label: 'Mã SKU', required: true },
+      { key: 'nhom', label: 'Nhóm sản phẩm', type: 'select', options: OPT.nhomSP, required: true },
+      { key: 'ten_sku', label: 'Tên SKU', required: true, full: true },
+      { key: 'quy_cach', label: 'Quy cách (độ dày, khổ, lớp mạ…)' },
+      { key: 'trang_thai', label: 'Trạng thái', type: 'select', options: OPT.trangThaiSKU },
+      { key: 'ghi_chu', label: 'Ghi chú', type: 'textarea', full: true },
+    ],
+  },
+  MucTieuSKU: {
+    label: 'Mục tiêu theo SKU', icon: 'chart', title: r => r.ten_kh + ' · ' + r.ma_sku,
+    fields: [
+      { key: 'nam', label: 'Năm mục tiêu' },
+      { key: 'ma_kh', label: 'Mã KH' },
+      { key: 'ten_kh', label: 'Khách hàng' },
+      { key: 'nvkd', label: 'NVKD' },
+      { key: 'ma_sku', label: 'Mã SKU' },
+      { key: 'ten_sku', label: 'Tên SKU' },
+      { key: 'nhom_sp', label: 'Nhóm' },
+      { key: 'sl_nam_truoc', label: 'SL năm trước (tấn)', type: 'number' },
+      { key: 'mt', label: 'Mục tiêu (tấn)', type: 'number' },
     ],
   },
   NhanVien: {
