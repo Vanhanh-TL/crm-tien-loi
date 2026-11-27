@@ -679,7 +679,7 @@
           : `<span class="${raw ? '' : 'muted'}">${raw ? esc(fmtDS(num(r.t[key]))) : '—'}</span>`;
       };
       const skuCell = r => `<div class="sku-cell">
-          ${r.skus.length ? `<button class="sku-chip ${r.nReg ? '' : 'empty'}" data-act="sku" data-id="${esc(r.k.id)}" title="Xem danh sách SKU">${r.nReg ? `${r.nReg} SKU` : 'Chưa đặt'}</button>` : ''}
+          ${r.skus.length ? `<button class="sku-chip ${r.nReg ? '' : 'empty'}" data-act="sku" data-id="${esc(r.k.id)}" title="Danh sách SKU của khách (SL năm trước + mục tiêu)">${r.skus.length} SKU${r.nReg ? ` · ${r.nReg} có MT` : ''}</button>` : ''}
           <button class="btn btn-sm sku-add" data-act="sku-add" data-id="${esc(r.k.id)}" title="Thêm mục tiêu theo SKU">${icon('plus', 14)}</button></div>`;
       const totalCells = (pfx) => `${MT_GROUPS.map(([g, , ds, mt]) => `<td class="num" id="${pfx}-${ds}"></td><td class="num" id="${pfx}-${mt}"></td><td class="num" id="${pfx}-g-${g}"></td>`).join('')}<td id="${pfx}-sku"></td><td></td><td class="num" id="${pfx}-skumt"></td><td class="num" id="${pfx}-all"></td>`;
 
@@ -818,7 +818,7 @@
     const skuInfo = ma => D().SKU.find(x => same(x.ma_sku, ma));
     const canNewSku = !!me;   // mọi nhân viên được thêm SKU mới; sửa / xóa SKU: Quản lý (trang Danh mục SKU)
     let items = skuRowsOf(k, nam).map(x => ({ ma_sku: x.ma_sku, ten_sku: x.ten_sku, nhom_sp: x.nhom_sp, sl: qtyInput(x.sl_nam_truoc), mt: qtyInput(x.mt), isNew: false, xoa: false, changed: false }));
-    const order = list => list.slice().sort((a, b) => (UI.parseQty(b.mt) > 0) - (UI.parseQty(a.mt) > 0) || String(a.nhom_sp).localeCompare(b.nhom_sp, 'vi') || String(a.ma_sku).localeCompare(b.ma_sku));
+    const order = list => list.slice().sort((a, b) => UI.parseQty(b.sl) - UI.parseQty(a.sl) || UI.parseQty(b.mt) - UI.parseQty(a.mt) || String(a.ma_sku).localeCompare(b.ma_sku));
     items = order(items);
     const changes = () => items.filter(i => i.changed || i.xoa || (i.isNew && (UI.parseQty(i.mt) || UI.parseQty(i.sl)))).length;
 
@@ -839,7 +839,7 @@
       $('#sku-dl').innerHTML = D().SKU.filter(x => x.trang_thai !== 'Ngừng bán' && !used.has(x.ma_sku))
         .map(x => `<option value="${esc(x.ma_sku)} — ${esc(x.ten_sku)}">${esc(x.nhom)}</option>`).join('');
       const live = items.filter(i => !i.xoa);
-      const reg = live.filter(i => UI.parseQty(i.mt) > 0 || i.isNew), rest = live.filter(i => !(UI.parseQty(i.mt) > 0 || i.isNew));
+
       const row = i => {
         const idx = items.indexOf(i), info = skuInfo(i.ma_sku);
         return `<tr data-i="${idx}">
@@ -851,8 +851,7 @@
           <td><button class="btn btn-sm btn-ghost" data-sk="del" title="Bỏ SKU này">${icon('x', 14)}</button></td></tr>`;
       };
       $('#sku-body').innerHTML = `<div class="table-wrap"><table class="target-table sku-table"><thead><tr><th>SKU</th><th>Nhóm</th><th class="num">SL ${prev}</th><th class="num">MT ${nam}</th><th class="num">±</th><th></th></tr></thead>
-        <tbody>${reg.length ? reg.map(row).join('') : `<tr><td colspan="6" class="muted small">Chưa có SKU nào đăng ký mục tiêu. Chọn SKU ở ô phía trên rồi bấm <b>Thêm SKU</b>.</td></tr>`}</tbody>
-        ${rest.length ? `<tbody><tr class="nv-row"><td colspan="6">Có sản lượng ${prev}, chưa đặt mục tiêu (${rest.length})</td></tr>${rest.map(row).join('')}</tbody>` : ''}
+        <tbody>${live.length ? live.map(row).join('') : `<tr><td colspan="6" class="muted small">Khách hàng chưa có sản lượng ${prev} theo SKU. Gõ mã / tên SKU ở ô phía trên rồi bấm <b>Thêm SKU</b> (SKU chưa có thì bấm <b>Tạo SKU mới</b>).</td></tr>`}</tbody>
         <tfoot id="sku-sum"></tfoot></table></div>`;
       sum();
     };
@@ -882,8 +881,7 @@
     const pushSku = info => {
       let it = items.find(i => same(i.ma_sku, info.ma_sku));
       if (it) { it.xoa = false; }
-      else { it = { ma_sku: info.ma_sku, ten_sku: info.ten_sku, nhom_sp: info.nhom, sl: '', mt: '', isNew: true, xoa: false, changed: false }; items.push(it); }
-      if (!UI.parseQty(it.mt)) it.isNew = true;   // đưa lên nhóm "đăng ký mục tiêu" để nhập
+      else { it = { ma_sku: info.ma_sku, ten_sku: info.ten_sku, nhom_sp: info.nhom, sl: '', mt: '', isNew: true, xoa: false, changed: false }; items.unshift(it); }
       $('#sku-pick').value = '';
       draw();
       const inp = m.el.querySelector(`tr[data-i="${items.indexOf(it)}"] input[data-f="mt"]`);

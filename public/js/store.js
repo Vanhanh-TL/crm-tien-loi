@@ -169,7 +169,7 @@
         return;
       }
       const row = { ...(cur || { id: uid(), ngay_tao: now }), nam: String(r.nam), khach_hang_id: kh.id, ma_kh: kh.ma_kh, ten_kh: kh.ten, nvkd: kh.nvkd, nhom_kd: kh.nhom_kd,
-        ma_sku: r.ma_sku, ten_sku: sku ? sku.ten_sku : cur.ten_sku, nhom_sp: sku ? sku.nhom : cur.nhom_sp, nguoi_cap_nhat: who, ngay_cap_nhat: now };
+        ma_sku: r.ma_sku, sku_id: sku ? sku.id : (cur.sku_id || ''), ten_sku: sku ? sku.ten_sku : cur.ten_sku, nhom_sp: sku ? sku.nhom : cur.nhom_sp, nguoi_cap_nhat: who, ngay_cap_nhat: now };
       ['mt', 'sl_nam_truoc', 'ghi_chu'].forEach(k => { if (r[k] !== undefined) row[k] = r[k]; });
       if (cur) Object.assign(cur, row); else list.push(row);
       res.saved.push(row);
