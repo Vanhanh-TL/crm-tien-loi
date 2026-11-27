@@ -286,3 +286,4 @@ tr.selected td { background: var(--accent-soft) !important; }
 .sku-table tr.sku-unknown td { background: #fffbeb; }
 .sku-opt.intable { color: var(--green); } .sku-opt.intable .t { color: var(--green); } .nhom-pick { padding: 4px 6px; font-size: 12px; width: auto; }
 @keyframes rowflash { 0%, 60% { background: #fef08a; } 100% { background: transparent; } } .sku-table tr.flash td { animation: rowflash 1.4s ease-out; }
+.staff .grp-tag { margin-left: 6px; font-size: 11px; font-weight: 600; color: #6b7280; background: #f3f4f6; border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
