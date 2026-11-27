@@ -7,13 +7,14 @@
   const Store = {
     mode: 'demo',   // demo | live | login
     me: null,       // { email, ten } khi đã đăng nhập
+    missing: [],    // bảng mà Apps Script không trả về (đang chạy Code.gs cũ)
     loginError: '',
     data: Object.fromEntries(TABLES.map(t => [t, []])),
 
     async init() {
       try {
         const res = await call({ action: 'all' });
-        if (res.ok) { this.mode = 'live'; this.me = res.me || null; this.data = { ...this.data, ...res.data }; return; }
+        if (res.ok) { this.mode = 'live'; this.me = res.me || null; this.missing = TABLES.filter(t => !Array.isArray(res.data[t])); this.data = { ...this.data, ...res.data }; return; }
         if (res.needLogin) { this.mode = 'login'; this.loginError = res.error === 'Chưa đăng nhập' ? '' : res.error; return; }
         console.warn('API chưa sẵn sàng → chạy DEMO:', res.error);
       } catch (e) { console.warn('Không gọi được /api → chạy DEMO'); }
@@ -36,7 +37,7 @@
     async reload() {
       if (this.mode !== 'live') return;
       const res = await call({ action: 'all' });
-      if (res.ok) this.data = { ...this.data, ...res.data };
+      if (res.ok) { this.missing = TABLES.filter(t => !Array.isArray(res.data[t])); this.data = { ...this.data, ...res.data }; }
     },
 
     requestOtp(email) { return call({ action: 'otp_request', email }); },

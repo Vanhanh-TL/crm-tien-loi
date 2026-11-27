@@ -586,6 +586,21 @@
     if (Store.me) return list.find(n => same(n.email, Store.me.email)) || null;
     return list.find(n => n.ten === App.currentUser()) || null;
   }
+  /* Tự chẩn đoán vì sao dữ liệu không hiện: Apps Script chưa cập nhật, hoặc tab trong Sheet sai tên cột */
+  const REQUIRED_COLS = { SKU: ['ma_sku', 'ten_sku', 'nhom'], MucTieuSKU: ['nam', 'ma_kh', 'ma_sku'], MucTieu: ['nam', 'ma_kh'], KhachHang: ['ma_kh', 'ten', 'nvkd'] };
+  function dataIssues(tables) {
+    if (Store.mode !== 'live') return '';
+    const out = [];
+    const miss = (Store.missing || []).filter(t => tables.includes(t));
+    if (miss.length) out.push(`Máy chủ Apps Script đang chạy <b>bản Code.gs cũ</b> nên chưa đọc được bảng <b>${miss.join(', ')}</b>. Cách sửa: dán Code.gs mới → <b>Deploy → Manage deployments → ✏️ → Version: New version → Deploy</b> (không chọn "New deployment"), rồi bấm Tải lại.`);
+    tables.forEach(t => {
+      const rows = D()[t] || [], need = REQUIRED_COLS[t];
+      if (!need || !rows.length) return;
+      const lack = need.filter(c => !(c in rows[0]));
+      if (lack.length) out.push(`Tab <b>${t}</b> trong Google Sheet thiếu cột <b>${lack.join(', ')}</b> ở dòng 1 (có thể đang dùng tên cột khác như "Mã SKU"). Tên cột phải viết đúng như mẫu: ${need.map(c => `<code>${c}</code>`).join(', ')}.`);
+    });
+    return out.length ? `<div class="data-warn"><b>Dữ liệu chưa hiển thị đầy đủ</b><ul>${out.map(x => `<li>${x}</li>`).join('')}</ul></div>` : '';
+  }
   const isManager = me => !!me && same(me.vai_tro, 'Quản lý');
   const isLeader = me => !!me && same(me.vai_tro, 'Trưởng nhóm');
   const canSeeKh = (me, k) => !!me && (isManager(me) || same(k.nvkd, me.ten) || (isLeader(me) && !!me.nhom_kd && same(k.nhom_kd, me.nhom_kd)));
@@ -642,7 +657,8 @@
       const head0 = head('Bán hàng', `Mục tiêu sản lượng ${nam}`, `So với sản lượng thực hiện ${prev} theo từng khách hàng · đơn vị: ${esc(DV)}`,
         `<button class="btn" data-act="export">Xuất CSV</button><button class="btn" data-act="export-sku">CSV theo SKU</button><button class="btn btn-primary" data-act="save" id="mt-save" ${this.dirtyCount() ? '' : 'disabled'}>Lưu mục tiêu${this.dirtyCount() ? ` (${this.dirtyCount()})` : ''}</button>`);
       this._rows = null;
-      if (!me) return head0 + `<div class="card"><div class="empty">Tài khoản ${Store.me ? `<b>${esc(Store.me.email)}</b>` : 'này'} chưa có trong danh sách <b>Nhân viên</b> nên chưa được giao khách hàng nào.<br>Liên hệ Quản lý để được thêm (đúng email, vai trò, nhóm KD).</div></div>`;
+      const warn = dataIssues(['SKU', 'MucTieuSKU', 'MucTieu', 'KhachHang']);
+      if (!me) return head0 + warn + `<div class="card"><div class="empty">Tài khoản ${Store.me ? `<b>${esc(Store.me.email)}</b>` : 'này'} chưa có trong danh sách <b>Nhân viên</b> nên chưa được giao khách hàng nào.<br>Liên hệ Quản lý để được thêm (đúng email, vai trò, nhóm KD).</div></div>`;
 
       const rows = this._rows = this.rows(me);
       const groups = this._groups = uniq(rows.map(r => r.k.nvkd || '(Chưa giao NVKD)')).map(name => ({ name, rows: rows.filter(r => (r.k.nvkd || '(Chưa giao NVKD)') === name) }));
@@ -667,7 +683,7 @@
           <button class="btn btn-sm sku-add" data-act="sku-add" data-id="${esc(r.k.id)}" title="Thêm mục tiêu theo SKU">${icon('plus', 14)}</button></div>`;
       const totalCells = (pfx) => `${MT_GROUPS.map(([g, , ds, mt]) => `<td class="num" id="${pfx}-${ds}"></td><td class="num" id="${pfx}-${mt}"></td><td class="num" id="${pfx}-g-${g}"></td>`).join('')}<td id="${pfx}-sku"></td><td></td><td class="num" id="${pfx}-skumt"></td><td class="num" id="${pfx}-all"></td>`;
 
-      return head0 + `<div class="filters">
+      return head0 + warn + `<div class="filters">
           <div class="field"><label>Năm mục tiêu</label><select class="input" data-filter="nam">${years.map(y => `<option value="${y}" ${String(y) === s.nam ? 'selected' : ''}>Năm ${y}</option>`).join('')}</select></div>
           <div class="field search"><label>Tìm khách hàng</label><input class="input" data-filter="q" value="${esc(s.q)}" placeholder="Tên, mã KH…"></div>
           ${isManager(me) || isLeader(me) ? selectHtml('nvkd', 'NVKD phụ trách', uniq(visible.map(k => k.nvkd)), s.nvkd) : ''}
@@ -972,7 +988,7 @@
         .sort((a, b) => String(a.nhom).localeCompare(b.nhom, 'vi') || String(a.ma_sku).localeCompare(b.ma_sku));
       const used = ma => uniq(D().MucTieuSKU.filter(x => same(x.ma_sku, ma) && num(x.mt) > 0).map(x => x.khach_hang_id || x.ma_kh)).length;
       return head('Thiết lập', 'Danh mục SKU', 'Dùng để đặt mục tiêu sản lượng theo SKU. Nhóm "Mạ màu" cộng vào MT mạ màu, "Mạ kẽm"/"Mạ lạnh" cộng vào MT mạ kẽm + mạ lạnh.',
-        canAdd ? `<button class="btn btn-primary" data-act="new">${icon('plus', 15)} Thêm SKU</button>` : '') +
+        canAdd ? `<button class="btn btn-primary" data-act="new">${icon('plus', 15)} Thêm SKU</button>` : '') + dataIssues(['SKU', 'MucTieuSKU']) +
         `<div class="filters">
           <div class="field search"><label>Tìm SKU</label><input class="input" data-filter="q" value="${esc(s.q)}" placeholder="Mã, tên, quy cách…"></div>
           ${selectHtml('nhom', 'Nhóm sản phẩm', OPT.nhomSP, s.nhom)}
