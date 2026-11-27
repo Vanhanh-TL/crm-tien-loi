@@ -249,3 +249,24 @@ tr.selected td { background: var(--accent-soft) !important; }
 .growth.down { color: var(--red); }
 .target-table tbody td:first-child, .target-table tfoot td:first-child, .target-table thead tr:first-child th:first-child { position: sticky; left: 0; z-index: 1; background: var(--panel); }
 .target-table tfoot td:first-child { background: #fafbfc; }
+
+/* ---------- Mục tiêu: nhóm theo NVKD + SKU ---------- */
+.target-table .nv-row td { background: #f6f7f9; font-weight: 700; cursor: pointer; border-top: 1px solid var(--line); }
+.target-table .nv-row td:first-child { background: #f6f7f9; }
+.target-table .nv-row .staff { font-weight: 700; }
+.chev { display: inline-flex; vertical-align: middle; margin-right: 4px; color: var(--muted); transition: transform .15s; }
+.chev.closed { transform: rotate(-90deg); }
+.sku-cell { display: flex; align-items: center; gap: 6px; }
+.sku-chip { border: 1px solid #c7d2fe; background: #eef2ff; color: #4338ca; border-radius: 99px; padding: 3px 10px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.sku-chip.empty { background: #f9fafb; color: var(--muted); border-color: var(--line); }
+.sku-add { padding: 4px 6px; }
+.sku-locked { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.sku-locked .tag { font-size: 10px; font-weight: 700; color: #4338ca; background: #eef2ff; border-radius: 4px; padding: 1px 5px; }
+.sku-pick-row { margin-bottom: 12px; }
+.sku-pick-row .input { flex: 1; }
+.sku-table .cell { width: 120px; }
+/* Popup rộng không tràn màn hình hẹp: bảng bên trong tự cuộn ngang */
+.overlay { grid-template-columns: minmax(0, 1fr); }
+.modal, .modal-body { min-width: 0; }
+.modal-head h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sku-pick-row { flex-wrap: wrap; } .sku-pick-row .input { min-width: 200px; }
