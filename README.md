@@ -89,6 +89,7 @@ Quyền được kiểm tra ở Apps Script theo **email đăng nhập ↔ tab N
 | Email chưa có trong NhanVien | Không thấy gì | ❌ | ❌ |
 
 - **Lần đầu:** khi chưa có ai là "Quản lý", bất kỳ ai cũng sửa được trang Nhân viên → hãy thêm chính mình với vai trò **Quản lý** (đúng email đăng nhập). Từ đó chỉ Quản lý sửa được.
+- **Nhóm KD tự động theo bảng Nhân viên:** nhóm KD của khách hàng = `nhom_kd` của NVKD phụ trách trong tab NhanVien (cột `nhom_kd` ở tab KhachHang tự sửa theo, ô Nhóm KD trên form bị khóa). Mọi chỗ hiện NVKD đều kèm nhãn nhóm KD. **Trưởng nhóm thấy dữ liệu của mọi NVKD có cùng nhóm KD với mình.** Đổi nhóm của một NVKD trong tab NhanVien là toàn bộ khách của người đó chuyển nhóm theo.
 - Chỉ Quản lý / Trưởng nhóm được đổi "NVKD phụ trách" của khách hàng (tránh NVKD tự chuyển khách về mình).
 - **Sản lượng năm trước (tấn):** Quản lý gõ trực tiếp trên trang, hoặc dán vào tab `MucTieu` trong Sheet: mỗi dòng ghi `nam` (năm mục tiêu, vd `2027`), `ma_kh`, `sl_ma_mau`, `sl_kem_lanh`. Để trống cột `id` (tự sinh). Không cần điền `khach_hang_id`, hệ thống tự khớp theo `ma_kh`.
 - Đơn vị: tấn (đổi ở `OPT.dvSanLuong` trong `public/js/schema.js`). Số lẻ gõ bằng dấu phẩy, vd `12,5`; trong Sheet số lưu dạng `12.5`.
