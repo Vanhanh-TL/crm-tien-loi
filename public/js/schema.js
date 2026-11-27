@@ -10,7 +10,7 @@ window.OPT = {
   mucDo: ['Cao', 'Trung bình', 'Thấp'],
   ketQua: ['Không nghe máy', 'Gọi lại sau', 'Quan tâm', 'Hẹn gặp', 'Chốt đơn', 'Từ chối', 'Sai số'],
   trangThaiKeHoach: ['Nháp', 'Đã duyệt', 'Đang thực hiện', 'Hoàn thành'],
-  vaiTro: ['Quản lý', 'Trưởng nhóm', 'NVKD', 'Telesale'],
+  vaiTro: ['Admin', 'Quản lý', 'Trưởng nhóm', 'NVKD', 'Telesale'],   // Admin = Quản lý: toàn quyền
   trangThaiNV: ['Đang làm', 'Nghỉ việc'],
   dvSanLuong: 'tấn',   // Đơn vị ở trang Mục tiêu sản lượng
   nhomSP: ['Mạ màu', 'Mạ kẽm', 'Mạ lạnh'],   // nhóm SKU: "Mạ màu" cộng vào MT mạ màu, còn lại cộng vào MT mạ kẽm + mạ lạnh

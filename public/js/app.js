@@ -599,9 +599,21 @@
       const lack = need.filter(c => !(c in rows[0]));
       if (lack.length) out.push(`Tab <b>${t}</b> trong Google Sheet thiếu cột <b>${lack.join(', ')}</b> ở dòng 1 (có thể đang dùng tên cột khác như "Mã SKU"). Tên cột phải viết đúng như mẫu: ${need.map(c => `<code>${c}</code>`).join(', ')}.`);
     });
+    // Dòng mục tiêu SKU có nhưng không hiện trong popup: sai năm, hoặc mã KH không khớp
+    if (tables.includes('MucTieuSKU') && !miss.includes('MucTieuSKU')) {
+      const nam = String(App.st('muc-tieu', {}).nam || new Date().getFullYear() + 1);
+      const T = D().MucTieuSKU || [];
+      if (!T.length) out.push(`CRM chưa nhận được dòng nào từ tab <b>MucTieuSKU</b> (với quyền của tài khoản này). Kiểm tra: tên tab đúng <code>MucTieuSKU</code>, dữ liệu bắt đầu từ dòng 2, cột <code>ma_kh</code> khớp mã khách, và <b>NVKD phụ trách</b> của khách đúng tên bạn (hoặc bạn là Quản lý).`);
+      const other = {};
+      T.forEach(x => { const y = String(x.nam || '').trim(); if (y !== nam) other[y || '(trống)'] = (other[y || '(trống)'] || 0) + 1; });
+      Object.keys(other).forEach(y => out.push(`${other[y]} dòng SKU có cột <code>nam</code> = <b>${esc(y)}</b>, trong khi trang đang xem <b>năm mục tiêu ${nam}</b> nên không hiện. Cột <code>nam</code> là năm MỤC TIÊU: sản lượng 2026 thì ghi <code>nam</code> = <b>${Number(new Date().getFullYear()) + 1}</b>, số tấn 2026 để ở cột <code>sl_nam_truoc</code>.${/^\d{4}$/.test(y) ? ` (Hoặc chọn "Năm ${esc(y)}" ở bộ lọc Năm mục tiêu.)` : ''}`));
+      const kh = D().KhachHang;
+      const lost = T.filter(x => !kh.some(k => String(k.id) === String(x.khach_hang_id) || (x.ma_kh && same(k.ma_kh, x.ma_kh))));
+      if (lost.length) out.push(`${lost.length} dòng SKU có mã KH không khớp khách hàng nào (vd: ${lost.slice(0, 3).map(x => `<code>${esc(x.ma_kh || '(trống)')}</code>`).join(', ')}). Mã trong tab MucTieuSKU phải trùng cột <code>ma_kh</code> của tab KhachHang.`);
+    }
     return out.length ? `<div class="data-warn"><b>Dữ liệu chưa hiển thị đầy đủ</b><ul>${out.map(x => `<li>${x}</li>`).join('')}</ul></div>` : '';
   }
-  const isManager = me => !!me && same(me.vai_tro, 'Quản lý');
+  const isManager = me => !!me && (same(me.vai_tro, 'Quản lý') || same(me.vai_tro, 'Admin'));   // Admin = toàn quyền
   const isLeader = me => !!me && same(me.vai_tro, 'Trưởng nhóm');
   const canSeeKh = (me, k) => !!me && (isManager(me) || same(k.nvkd, me.ten) || (isLeader(me) && !!me.nhom_kd && same(k.nhom_kd, me.nhom_kd)));
 
@@ -664,7 +676,7 @@
       const groups = this._groups = uniq(rows.map(r => r.k.nvkd || '(Chưa giao NVKD)')).map(name => ({ name, rows: rows.filter(r => (r.k.nvkd || '(Chưa giao NVKD)') === name) }));
       const canDs = isManager(me);
       const visible = D().KhachHang.filter(k => canSeeKh(me, k));
-      const scope = isManager(me) ? 'Quản lý — xem và nhập cho tất cả khách hàng, nhập được cả sản lượng năm trước.'
+      const scope = isManager(me) ? `${esc(me.vai_tro)} — xem và nhập cho tất cả khách hàng, nhập được cả sản lượng năm trước.`
         : isLeader(me) ? `Trưởng nhóm — khách hàng của bạn và của ${esc(me.nhom_kd || 'nhóm')}.`
         : `Khách hàng do <b>${esc(me.ten)}</b> phụ trách.`;
       const years = [nam - 2, nam - 1, nam, nam + 1].filter((y, i, a) => a.indexOf(y) === i);
