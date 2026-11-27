@@ -270,3 +270,5 @@ tr.selected td { background: var(--accent-soft) !important; }
 .modal, .modal-body { min-width: 0; }
 .modal-head h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sku-pick-row { flex-wrap: wrap; } .sku-pick-row .input { min-width: 200px; }
+.sku-total { color: #4338ca; font-weight: 600; cursor: pointer; }
+.sku-new { border: 1px dashed #c7d2fe; background: #f8f9ff; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
