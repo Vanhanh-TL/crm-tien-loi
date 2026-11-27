@@ -18,6 +18,8 @@ Trình duyệt ──► Cloudflare Worker (src/worker.js) giao diện từ publ
 | Pipeline bán hàng | Kanban 6 giai đoạn, kéo thả, dự báo theo xác suất, tỷ lệ thắng |
 | Telesale | Hàng đợi "cần gọi lại" / "chưa từng gọi", ghi kết quả 1 chạm, hẹn gọi lại, nhật ký cuộc gọi |
 | Mục tiêu sản lượng | Theo từng khách hàng, đơn vị **tấn**: sản lượng năm trước (Mạ màu; Mạ kẽm + Mạ lạnh) bên cạnh ô nhập mục tiêu năm sau, % tăng trưởng, tổng. **Có phân quyền** (xem dưới) |
+| Mục tiêu theo SKU | Nút **+** ở cột *Mục tiêu SKU*: chọn SKU từ danh mục, xem SL năm trước của KH theo SKU, nhập mục tiêu (tấn). MT nhóm của KH tự = tổng MT các SKU trong nhóm |
+| Danh mục SKU | Mã, tên, nhóm (Mạ màu / Mạ kẽm / Mạ lạnh), quy cách, trạng thái. Chỉ Quản lý sửa |
 | Thu thập thị trường | NVKD ghi nhận tin đối thủ, giá, nhu cầu, KH mới; thống kê theo tỉnh / người thu thập |
 | Kế hoạch thị trường | Mục tiêu theo tháng × NVKD × khu vực, tiến độ, đối chiếu với số liệu CRM tự đếm, sao chép từ tháng trước |
 | Nhân viên | Danh sách nhân viên dùng cho các ô chọn người phụ trách |
@@ -90,6 +92,9 @@ Quyền được kiểm tra ở Apps Script theo **email đăng nhập ↔ tab N
 - Chỉ Quản lý / Trưởng nhóm được đổi "NVKD phụ trách" của khách hàng (tránh NVKD tự chuyển khách về mình).
 - **Sản lượng năm trước (tấn):** Quản lý gõ trực tiếp trên trang, hoặc dán vào tab `MucTieu` trong Sheet: mỗi dòng ghi `nam` (năm mục tiêu, vd `2027`), `ma_kh`, `sl_ma_mau`, `sl_kem_lanh`. Cột `id` điền mã bất kỳ không trùng (vd `mt1`, `mt2`…). Không cần điền `khach_hang_id`, hệ thống tự khớp theo `ma_kh`.
 - Đơn vị: tấn (đổi ở `OPT.dvSanLuong` trong `public/js/schema.js`). Số lẻ gõ bằng dấu phẩy, vd `12,5`; trong Sheet số lưu dạng `12.5`.
+- **Mục tiêu theo SKU** (tab `MucTieuSKU`, mỗi dòng = 1 KH × 1 SKU × 1 năm): cùng quy tắc phân quyền. Dán SL năm trước theo SKU vào Sheet với các cột `id` (mã không trùng), `nam`, `ma_kh`, `ma_sku`, `sl_nam_truoc`. Mã SKU phải có trong tab `SKU`.
+  - Khi KH có ít nhất 1 SKU đặt mục tiêu trong nhóm, MT nhóm (Mạ màu hoặc Mạ kẽm + Mạ lạnh) tự bằng tổng các SKU và không sửa tay được nữa.
+  - NVKD bỏ 1 SKU đã có SL năm trước thì chỉ xóa mục tiêu, giữ lại SL; Quản lý xóa được hẳn dòng.
 - Các trang khác (Khách hàng, Pipeline…) hiện vẫn cho mọi người đã đăng nhập xem.
 
 ## Sửa / mở rộng
