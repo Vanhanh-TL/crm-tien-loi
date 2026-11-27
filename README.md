@@ -92,7 +92,8 @@ Quyền được kiểm tra ở Apps Script theo **email đăng nhập ↔ tab N
 - Chỉ Quản lý / Trưởng nhóm được đổi "NVKD phụ trách" của khách hàng (tránh NVKD tự chuyển khách về mình).
 - **Sản lượng năm trước (tấn):** Quản lý gõ trực tiếp trên trang, hoặc dán vào tab `MucTieu` trong Sheet: mỗi dòng ghi `nam` (năm mục tiêu, vd `2027`), `ma_kh`, `sl_ma_mau`, `sl_kem_lanh`. Để trống cột `id` (tự sinh). Không cần điền `khach_hang_id`, hệ thống tự khớp theo `ma_kh`.
 - Đơn vị: tấn (đổi ở `OPT.dvSanLuong` trong `public/js/schema.js`). Số lẻ gõ bằng dấu phẩy, vd `12,5`; trong Sheet số lưu dạng `12.5`.
-- **Mục tiêu theo SKU** (tab `MucTieuSKU`, mỗi dòng = 1 KH × 1 SKU × 1 năm): cùng quy tắc phân quyền. Dán SL năm trước theo SKU vào Sheet với các cột `nam`, `ma_kh`, `ma_sku`, `sl_nam_truoc`. Mã SKU phải có trong tab `SKU`.
+- **Mục tiêu theo SKU** (tab `MucTieuSKU`, mỗi dòng = 1 KH × 1 SKU × 1 năm): cùng quy tắc phân quyền. **Dán SL năm trước theo SKU chỉ cần 3 cột: `ma_kh` (hoặc `ten_kh`), `ma_sku` (hoặc `ten_sku`), `sl_nam_truoc`.** Các cột còn lại tự điền: `id`, `khach_hang_id` (lấy từ tab KhachHang), `sku_id`, `ten_sku`, `nhom_sp` (lấy từ tab SKU), `ten_kh`, `nvkd`, `nam` (để trống = năm sau). SKU chưa có trong tab `SKU` thì thêm vào tab SKU trước (hoặc ngay trên popup).
+  - Popup **Mục tiêu SKU** của mỗi khách liệt kê mọi SKU khách đã mua năm trước (SL lớn nhất lên đầu), cột MT bên cạnh để NVKD gõ; thêm SKU từ danh mục hoặc tạo SKU mới ngay trong popup.
   - Khi KH có ít nhất 1 SKU đặt mục tiêu trong nhóm, MT nhóm (Mạ màu hoặc Mạ kẽm + Mạ lạnh) tự bằng tổng các SKU và không sửa tay được nữa.
   - NVKD bỏ 1 SKU đã có SL năm trước thì chỉ xóa mục tiêu, giữ lại SL; Quản lý xóa được hẳn dòng.
 - Các trang khác (Khách hàng, Pipeline…) hiện vẫn cho mọi người đã đăng nhập xem.
