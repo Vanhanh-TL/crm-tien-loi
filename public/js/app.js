@@ -640,9 +640,16 @@
     const all = D().MucTieuSKU.filter(mine);
     const cur = all.filter(x => String(x.nam).trim() === String(nam));
     const prev = all.filter(x => String(x.nam).trim() === prevY && num(x.sl_nam_truoc) > 0 && !num(x.mt));
-    const findPrev = ma => prev.find(x => same(x.ma_sku, ma));
-    return cur.map(c => (!num(c.sl_nam_truoc) && findPrev(c.ma_sku) ? { ...c, sl_nam_truoc: findPrev(c.ma_sku).sl_nam_truoc } : c))
-      .concat(prev.filter(x => !cur.some(c => same(c.ma_sku, x.ma_sku))).map(x => ({ ...x, nam: String(nam), mt: '' })));
+    // Mỗi SKU chỉ 1 dòng: khóa = mã SKU (dòng dán tay chỉ có tên thì dùng tên); ưu tiên dòng năm mục tiêu có MT
+    const key = x => String(x.ma_sku || x.ten_sku || '').trim().toLowerCase();
+    const out = new Map();
+    cur.slice().sort((a, b) => num(b.mt) - num(a.mt)).forEach(c => { if (!out.has(key(c))) out.set(key(c), { ...c }); });
+    prev.forEach(p => {
+      const c = out.get(key(p));
+      if (!c) out.set(key(p), { ...p, nam: String(nam), mt: '' });
+      else if (!num(c.sl_nam_truoc)) c.sl_nam_truoc = p.sl_nam_truoc;
+    });
+    return [...out.values()];
   };
 
   const Targets = {

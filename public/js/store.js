@@ -160,7 +160,9 @@
     rows.forEach(r => {
       const kh = store.get('KhachHang', r.khach_hang_id);
       const sku = store.data.SKU.find(s => s.ma_sku === r.ma_sku);
-      const cur = list.find(x => String(x.nam) === String(r.nam) && x.khach_hang_id === r.khach_hang_id && x.ma_sku === r.ma_sku);
+      const isSku = x => x.ma_sku === r.ma_sku || (!x.ma_sku && sku && x.ten_sku === sku.ten_sku);
+      const cur = list.find(x => String(x.nam) === String(r.nam) && x.khach_hang_id === r.khach_hang_id && isSku(x))
+        || list.find(x => String(x.nam) === String(Number(r.nam) - 1) && x.khach_hang_id === r.khach_hang_id && isSku(x) && !(Number(x.mt) > 0));
       if (!kh || (!sku && !cur)) return res.errors.push({ ...r, error: !kh ? 'Không tìm thấy khách hàng' : 'Mã SKU không có trong danh mục' });
       touched.add(kh.id);
       if (r.xoa) {
