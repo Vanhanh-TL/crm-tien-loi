@@ -7,7 +7,7 @@
  *   APPS_SCRIPT_URL  = https://script.google.com/macros/s/xxxx/exec
  *   API_TOKEN        = trùng API_TOKEN trong Script properties của Apps Script (cũng dùng để ký cookie)
  */
-const DATA_ACTIONS = new Set(['all', 'list', 'create', 'update', 'delete', 'save_targets']);
+const DATA_ACTIONS = new Set(['all', 'list', 'create', 'update', 'delete', 'save_targets', 'save_sku_targets']);
 const COOKIE = 'crm_session';
 const SESSION_DAYS = 7;
 
