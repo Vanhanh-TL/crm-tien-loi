@@ -840,6 +840,7 @@
     const me = myStaff(), canSl = isManager(me);
     const nam = Targets.st().nam, prev = Number(nam) - 1;
     const canNewSku = !!me;   // mọi nhân viên được thêm SKU mới; sửa / xóa SKU: Quản lý (trang Danh mục SKU)
+    const canEditSku = isManager(me);
     const fold = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().trim();
     /* SKU trong danh mục: khớp mã, hoặc khớp tên (dòng dán tay chỉ có tên SKU) */
     const findSku = (ma, ten) => D().SKU.find(x => ma && same(x.ma_sku, ma)) || D().SKU.find(x => ten && same(x.ten_sku, ten)) || D().SKU.find(x => ma && same(x.ten_sku, ma));
@@ -872,8 +873,10 @@
         const idx = items.indexOf(i), info = i.known ? findSku(i.ma_sku) : null, g = groupOf(i.nhom_sp);
         return `<tr data-i="${idx}" class="${i.known ? '' : 'sku-unknown'}">
           <td><div class="name">${esc(i.known ? i.ma_sku : (i.ten_sku || i.ma_sku))}</div>
-            <div class="meta muted small">${i.known ? esc(i.ten_sku) + (info?.quy_cach ? ' · ' + esc(info.quy_cach) : '') : `<span class="badge b-orange">Chưa có trong danh mục</span> ${canNewSku ? '<a href="#" data-sk="link-new">Thêm vào danh mục</a>' : ''}`}</div></td>
-          <td>${g ? `<span class="badge ${g === 'mau' ? 'b-purple' : 'b-blue'}">${esc(i.nhom_sp)}</span>` : '<span class="muted small">Chưa phân nhóm</span>'}</td>
+            <div class="meta muted small">${i.known ? (same(i.ten_sku, i.ma_sku) ? '' : esc(i.ten_sku)) + (info?.quy_cach ? ' · ' + esc(info.quy_cach) : '') : `<span class="badge b-orange">Chưa có trong danh mục</span> ${canNewSku ? '<a href="#" data-sk="link-new">Thêm vào danh mục</a>' : ''}`}</div></td>
+          <td>${g ? `<span class="badge ${g === 'mau' ? 'b-purple' : 'b-blue'}">${esc(i.nhom_sp)}</span>`
+            : i.known && canEditSku ? `<select class="input nhom-pick" data-nhom title="Chọn nhóm cho SKU này (lưu vào danh mục SKU)"><option value="">Chọn nhóm…</option>${OPT.nhomSP.map(o => `<option>${esc(o)}</option>`).join('')}</select>`
+            : '<span class="badge b-orange">Chưa có nhóm</span>'}</td>
           <td class="num">${canSl ? `<input class="input cell" data-f="sl" inputmode="decimal" value="${esc(i.sl)}" placeholder="0">` : `<span class="${UI.parseQty(i.sl) ? '' : 'muted'}">${esc(i.sl || '0')} ${esc(DV)}</span>`}</td>
           <td class="num"><input class="input cell ${i.changed || i.isNew ? 'dirty' : ''}" data-f="mt" inputmode="decimal" value="${esc(i.mt)}" placeholder="Nhập…"></td>
           <td class="num" data-gr>${growth(UI.parseQty(i.mt), UI.parseQty(i.sl))}</td>
@@ -893,7 +896,7 @@
       };
       const none = live.filter(i => !groupOf(i.nhom_sp));
       $('#sku-sum').innerHTML = MT_GROUPS.map(([g, label]) => line(label, live.filter(i => groupOf(i.nhom_sp) === g))).join('') +
-        (none.length ? line(`<span class="muted">Chưa phân nhóm (${none.length} SKU chưa có trong danh mục)</span>`, none) : '');
+        (none.length ? line(`<span class="muted">Chưa có nhóm (${none.length} SKU) — chọn nhóm ở cột Nhóm để cộng vào Mạ màu / Mạ kẽm + Mạ lạnh</span>`, none) : '');
       const n = changes(), btn = $('[data-sk="save"]');
       btn.disabled = !n; btn.textContent = n ? `Lưu (${n} thay đổi)` : 'Lưu';
     };
@@ -902,15 +905,16 @@
     let menuIdx = 0, menuList = [];
     const drawMenu = () => {
       const q = fold($('#sku-pick').value);
-      const used = new Set(items.filter(i => !i.xoa && i.known).map(i => fold(i.ma_sku)));
+      const used = new Set(items.filter(i => !i.xoa && i.known && i.ma_sku).map(i => fold(i.ma_sku)));
+      const inTable = q ? items.filter(i => !i.xoa && (fold(i.ma_sku).includes(q) || fold(i.ten_sku).includes(q))) : [];
       menuList = D().SKU.filter(x => x.trang_thai !== 'Ngừng bán' && !used.has(fold(x.ma_sku)) &&
         (!q || fold(x.ma_sku).includes(q) || fold(x.ten_sku).includes(q) || fold(x.quy_cach).includes(q)))
         .sort((a, b) => String(a.nhom).localeCompare(b.nhom, 'vi') || String(a.ma_sku).localeCompare(b.ma_sku)).slice(0, 60);
       menuIdx = Math.min(menuIdx, Math.max(0, menuList.length - 1));
       const raw = $('#sku-pick').value.trim();
-      $('#sku-menu').innerHTML = (menuList.length ? menuList.map((x, i) => `<div class="sku-opt ${i === menuIdx ? 'on' : ''}" data-opt="${i}">
-          <b>${esc(x.ma_sku)}</b><span class="t">${esc(x.ten_sku)}</span><span class="badge ${groupOf(x.nhom) === 'mau' ? 'b-purple' : 'b-blue'}">${esc(x.nhom || '—')}</span></div>`).join('')
-          : `<div class="sku-opt empty">Không có SKU nào trong danh mục khớp "${esc(raw)}".</div>`) +
+      $('#sku-menu').innerHTML = inTable.slice(0, 5).map(i => `<div class="sku-opt intable" data-goto="${items.indexOf(i)}">✓ <b>${esc(i.ma_sku || i.ten_sku)}</b><span class="t">đã có trong bảng — bấm để tới dòng này</span></div>`).join('') + (menuList.length ? menuList.map((x, i) => `<div class="sku-opt ${i === menuIdx ? 'on' : ''}" data-opt="${i}">
+          <b>${esc(x.ma_sku)}</b><span class="t">${same(x.ten_sku, x.ma_sku) ? '' : esc(x.ten_sku)}</span><span class="badge ${groupOf(x.nhom) === 'mau' ? 'b-purple' : 'b-blue'}">${esc(x.nhom || '—')}</span></div>`).join('')
+          : inTable.length ? '' : `<div class="sku-opt empty">Không có SKU nào trong danh mục khớp "${esc(raw)}".</div>`) +
         (canNewSku ? `<div class="sku-opt create" data-opt="new">${icon('plus', 13)} Tạo SKU mới${raw ? ` “${esc(raw)}”` : ''}</div>` : '');
       $('#sku-menu').hidden = false;
     };
@@ -950,7 +954,7 @@
     const saveNewSku = async btn => {
       const d = { ma_sku: $('#ns-ma').value.trim(), ten_sku: $('#ns-ten').value.trim(), nhom: $('#ns-nhom').value, quy_cach: $('#ns-qc').value.trim(), trang_thai: 'Đang bán' };
       if (!d.ma_sku || !d.ten_sku || !d.nhom) return toast('Nhập mã SKU, tên SKU và chọn nhóm sản phẩm', true);
-      if (D().SKU.some(x => same(x.ma_sku, d.ma_sku))) return toast('Mã SKU ' + d.ma_sku + ' đã có trong danh mục', true);
+      if (D().SKU.some(x => same(x.ma_sku, d.ma_sku) || same(x.ten_sku, d.ten_sku))) return toast('SKU "' + d.ma_sku + '" đã có trong danh mục — gõ tên ở ô tìm để chọn', true);
       btn.disabled = true; btn.textContent = 'Đang tạo…';
       try {
         const row = await Store.create('SKU', d);
@@ -963,6 +967,13 @@
 
     /* ---------- Sự kiện ---------- */
     m.el.addEventListener('mousedown', e => {
+      const gt = e.target.closest('[data-goto]');
+      if (gt) {
+        e.preventDefault(); const it = items[Number(gt.dataset.goto)];
+        Object.assign(it, { xoa: false, isNew: it.isNew || true }); $('#sku-pick').value = ''; closeMenu(); draw();
+        const inp = m.el.querySelector(`tr[data-i="${items.indexOf(it)}"] input[data-f="mt"]`); if (inp) { inp.focus(); inp.select(); }
+        return;
+      }
       const o = e.target.closest('[data-opt]');
       if (o) { e.preventDefault(); pick(o.dataset.opt); }
     });
@@ -1002,6 +1013,18 @@
           m.close(); App.render();
         } catch (err) { toast('Lỗi: ' + err.message, true); b.disabled = false; sum(); }
       }
+    });
+    m.el.addEventListener('change', async e => {
+      const sel = e.target.closest('select[data-nhom]');
+      if (!sel || !sel.value) return;
+      const it = items[Number(sel.closest('tr').dataset.i)], info = findSku(it.ma_sku, it.ten_sku);
+      if (!info) return;
+      sel.disabled = true;
+      try {
+        await Store.update('SKU', info.id, { nhom: sel.value });
+        items.filter(x => same(x.ma_sku, info.ma_sku)).forEach(x => { x.nhom_sp = sel.value; });
+        toast(`Đã đặt nhóm "${sel.value}" cho SKU ${info.ma_sku}`); draw();
+      } catch (err) { toast('Lỗi: ' + err.message, true); sel.disabled = false; }
     });
     m.el.addEventListener('input', e => {
       if (e.target.id === 'sku-pick') { menuIdx = 0; return drawMenu(); }

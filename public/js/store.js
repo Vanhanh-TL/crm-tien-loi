@@ -14,7 +14,7 @@
     async init() {
       try {
         const res = await call({ action: 'all' });
-        if (res.ok) { this.mode = 'live'; this.me = res.me || null; this.missing = TABLES.filter(t => !Array.isArray(res.data[t])); this.data = { ...this.data, ...res.data }; return; }
+        if (res.ok) { this.mode = 'live'; this.me = res.me || null; this.missing = TABLES.filter(t => !Array.isArray(res.data[t])); this.data = normalize({ ...this.data, ...res.data }); return; }
         if (res.needLogin) { this.mode = 'login'; this.loginError = res.error === 'Chưa đăng nhập' ? '' : res.error; return; }
         console.warn('API chưa sẵn sàng → chạy DEMO:', res.error);
       } catch (e) { console.warn('Không gọi được /api → chạy DEMO'); }
@@ -37,7 +37,7 @@
     async reload() {
       if (this.mode !== 'live') return;
       const res = await call({ action: 'all' });
-      if (res.ok) { this.missing = TABLES.filter(t => !Array.isArray(res.data[t])); this.data = { ...this.data, ...res.data }; }
+      if (res.ok) { this.missing = TABLES.filter(t => !Array.isArray(res.data[t])); this.data = normalize({ ...this.data, ...res.data }); }
     },
 
     requestOtp(email) { return call({ action: 'otp_request', email }); },
@@ -190,6 +190,12 @@
       res.targets.push({ ...(cur || { id: uid(), ngay_tao: now, nam, khach_hang_id: khId, ma_kh: kh.ma_kh, ten_kh: kh.ten, nvkd: kh.nvkd, nhom_kd: kh.nhom_kd }), ...sums, ngay_cap_nhat: now });
     });
     return res;
+  }
+
+  /* SKU dán tay thiếu mã → lấy tên làm mã (máy chủ cũng tự ghi lại vào Sheet) */
+  function normalize(d) {
+    (d.SKU || []).forEach(s => { if (!String(s.ma_sku ?? '').trim() && String(s.ten_sku ?? '').trim()) s.ma_sku = String(s.ten_sku).trim(); });
+    return d;
   }
 
   function uid() { return Math.random().toString(36).slice(2, 10); }
