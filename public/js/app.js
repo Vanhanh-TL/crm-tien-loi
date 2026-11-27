@@ -605,7 +605,7 @@
       const T = D().MucTieuSKU || [];
       if (!T.length) out.push(`CRM chưa nhận được dòng nào từ tab <b>MucTieuSKU</b> (với quyền của tài khoản này). Kiểm tra: tên tab đúng <code>MucTieuSKU</code>, dữ liệu bắt đầu từ dòng 2, cột <code>ma_kh</code> khớp mã khách, và <b>NVKD phụ trách</b> của khách đúng tên bạn (hoặc bạn là Quản lý).`);
       const other = {};
-      T.forEach(x => { const y = String(x.nam || '').trim(); if (y !== nam) other[y || '(trống)'] = (other[y || '(trống)'] || 0) + 1; });
+      T.forEach(x => { const y = String(x.nam || '').trim(); if (y !== nam && y !== String(Number(nam) - 1)) other[y || '(trống)'] = (other[y || '(trống)'] || 0) + 1; });
       Object.keys(other).forEach(y => out.push(`${other[y]} dòng SKU có cột <code>nam</code> = <b>${esc(y)}</b>, trong khi trang đang xem <b>năm mục tiêu ${nam}</b> nên không hiện. Cột <code>nam</code> là năm MỤC TIÊU: sản lượng 2026 thì ghi <code>nam</code> = <b>${Number(new Date().getFullYear()) + 1}</b>, số tấn 2026 để ở cột <code>sl_nam_truoc</code>.${/^\d{4}$/.test(y) ? ` (Hoặc chọn "Năm ${esc(y)}" ở bộ lọc Năm mục tiêu.)` : ''}`));
       const kh = D().KhachHang;
       const lost = T.filter(x => !kh.some(k => String(k.id) === String(x.khach_hang_id) || (x.ma_kh && same(k.ma_kh, x.ma_kh))));
@@ -630,8 +630,19 @@
     return `<span class="growth ${p >= 0 ? 'up' : 'down'}">${p >= 0 ? '+' : ''}${p}%</span>`;
   };
   /* Các dòng mục tiêu SKU của 1 KH trong năm (khớp theo id hoặc mã KH) */
-  const skuRowsOf = (k, nam) => D().MucTieuSKU.filter(x => String(x.nam) === String(nam) &&
-    (String(x.khach_hang_id) === String(k.id) || (x.ma_kh && same(x.ma_kh, k.ma_kh))));
+  /* SKU của 1 KH cho năm mục tiêu `nam`:
+     - dòng có nam = năm mục tiêu (SL năm trước + MT);
+     - dòng dán với nam = năm trước (vd 2026) chỉ có sản lượng, chưa có MT → coi là SL năm trước của SKU đó. */
+  const skuRowsOf = (k, nam) => {
+    const mine = x => String(x.khach_hang_id) === String(k.id) || (x.ma_kh && same(x.ma_kh, k.ma_kh));
+    const prevY = String(Number(nam) - 1);
+    const all = D().MucTieuSKU.filter(mine);
+    const cur = all.filter(x => String(x.nam).trim() === String(nam));
+    const prev = all.filter(x => String(x.nam).trim() === prevY && num(x.sl_nam_truoc) > 0 && !num(x.mt));
+    const findPrev = ma => prev.find(x => same(x.ma_sku, ma));
+    return cur.map(c => (!num(c.sl_nam_truoc) && findPrev(c.ma_sku) ? { ...c, sl_nam_truoc: findPrev(c.ma_sku).sl_nam_truoc } : c))
+      .concat(prev.filter(x => !cur.some(c => same(c.ma_sku, x.ma_sku))).map(x => ({ ...x, nam: String(nam), mt: '' })));
+  };
 
   const Targets = {
     st() {
@@ -850,7 +861,7 @@
       const used = new Set(items.filter(i => !i.xoa).map(i => i.ma_sku));
       $('#sku-dl').innerHTML = D().SKU.filter(x => x.trang_thai !== 'Ngừng bán' && !used.has(x.ma_sku))
         .map(x => `<option value="${esc(x.ma_sku)} — ${esc(x.ten_sku)}">${esc(x.nhom)}</option>`).join('');
-      const live = items.filter(i => !i.xoa);
+      const live = items.filter(i => !i.xoa && (UI.parseQty(i.sl) > 0 || UI.parseQty(i.mt) > 0 || i.isNew || i.changed));
 
       const row = i => {
         const idx = items.indexOf(i), info = skuInfo(i.ma_sku);

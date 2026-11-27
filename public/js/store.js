@@ -171,6 +171,10 @@
       const row = { ...(cur || { id: uid(), ngay_tao: now }), nam: String(r.nam), khach_hang_id: kh.id, ma_kh: kh.ma_kh, ten_kh: kh.ten, nvkd: kh.nvkd, nhom_kd: kh.nhom_kd,
         ma_sku: r.ma_sku, sku_id: sku ? sku.id : (cur.sku_id || ''), ten_sku: sku ? sku.ten_sku : cur.ten_sku, nhom_sp: sku ? sku.nhom : cur.nhom_sp, nguoi_cap_nhat: who, ngay_cap_nhat: now };
       ['mt', 'sl_nam_truoc', 'ghi_chu'].forEach(k => { if (r[k] !== undefined) row[k] = r[k]; });
+      if (r.sl_nam_truoc === undefined && !(cur && Number(cur.sl_nam_truoc) > 0)) {
+        const pv = list.find(x => x.khach_hang_id === kh.id && String(x.nam) === String(Number(r.nam) - 1) && x.ma_sku === r.ma_sku && !(Number(x.mt) > 0));
+        if (pv) row.sl_nam_truoc = pv.sl_nam_truoc;
+      }
       if (cur) Object.assign(cur, row); else list.push(row);
       res.saved.push(row);
     });
