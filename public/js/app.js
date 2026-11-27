@@ -859,7 +859,16 @@
     let items = skuRowsOf(k, nam).map(x => toItem(x))
       .sort((a, b) => UI.parseQty(b.sl) - UI.parseQty(a.sl) || UI.parseQty(b.mt) - UI.parseQty(a.mt) || String(a.ma_sku).localeCompare(b.ma_sku));
     const changes = () => items.filter(i => i.changed || i.xoa || (i.isNew && (UI.parseQty(i.mt) || UI.parseQty(i.sl)))).length;
-    let linkTarget = null;   // dòng SKU chưa có trong danh mục đang được "Thêm vào danh mục"
+    let linkTarget = null;
+    const inGrid = i => !i.xoa && (UI.parseQty(i.sl) > 0 || UI.parseQty(i.mt) > 0 || i.isNew || i.changed);
+    const sameSku = (i, info) => same(i.ma_sku, info.ma_sku) || same(i.ten_sku, info.ten_sku) || same(i.ten_sku, info.ma_sku);
+    /* SKU đã có ở lưới → báo, nháy dòng đó, đưa con trỏ tới ô MT; KHÔNG thêm dòng */
+    const alreadyInGrid = it => {
+      toast(`Đã có thông tin SKU ${it.ma_sku || it.ten_sku} ở bên dưới — không thêm lại.`);
+      $('#sku-pick').value = ''; closeMenu();
+      const tr = m.el.querySelector(`tr[data-i="${items.indexOf(it)}"]`);
+      if (tr) { tr.classList.remove('flash'); void tr.offsetWidth; tr.classList.add('flash'); tr.scrollIntoView({ block: 'nearest' }); const inp = tr.querySelector('input[data-f="mt"]'); if (inp) { inp.focus(); inp.select(); } }
+    };   // dòng SKU chưa có trong danh mục đang được "Thêm vào danh mục"
 
     const m = UI.modal({
       title: `Mục tiêu theo SKU · ${k.ten}`, wide: true,
@@ -875,7 +884,7 @@
 
     /* ---------- Bảng SKU của khách ---------- */
     const draw = () => {
-      const live = items.filter(i => !i.xoa && (UI.parseQty(i.sl) > 0 || UI.parseQty(i.mt) > 0 || i.isNew || i.changed));
+      const live = items.filter(inGrid);
       const row = i => {
         const idx = items.indexOf(i), info = i.known ? findSku(i.ma_sku) : null, g = groupOf(i.nhom_sp);
         return `<tr data-i="${idx}" class="${i.known ? '' : 'sku-unknown'}">
@@ -909,17 +918,17 @@
     };
 
     /* ---------- Ô tìm SKU: danh sách thả xuống, bấm chọn là thêm ngay ---------- */
-    let menuIdx = 0, menuList = [];
+    let menuIdx = 0, menuList = [], menuInGrid = [];
     const drawMenu = () => {
       const q = fold($('#sku-pick').value);
-      const used = new Set(items.filter(i => !i.xoa && i.known && i.ma_sku).map(i => fold(i.ma_sku)));
-      const inTable = q ? items.filter(i => !i.xoa && (fold(i.ma_sku).includes(q) || fold(i.ten_sku).includes(q))) : [];
+      const used = new Set(items.filter(i => inGrid(i) && i.ma_sku).map(i => fold(i.ma_sku)));
+      const inTable = menuInGrid = q ? items.filter(i => inGrid(i) && (fold(i.ma_sku).includes(q) || fold(i.ten_sku).includes(q))) : [];
       menuList = D().SKU.filter(x => x.trang_thai !== 'Ngừng bán' && !used.has(fold(x.ma_sku)) &&
         (!q || fold(x.ma_sku).includes(q) || fold(x.ten_sku).includes(q) || fold(x.quy_cach).includes(q)))
         .sort((a, b) => String(a.nhom).localeCompare(b.nhom, 'vi') || String(a.ma_sku).localeCompare(b.ma_sku)).slice(0, 60);
       menuIdx = Math.min(menuIdx, Math.max(0, menuList.length - 1));
       const raw = $('#sku-pick').value.trim();
-      $('#sku-menu').innerHTML = inTable.slice(0, 5).map(i => `<div class="sku-opt intable" data-goto="${items.indexOf(i)}">✓ <b>${esc(i.ma_sku || i.ten_sku)}</b><span class="t">đã có trong bảng — bấm để tới dòng này</span></div>`).join('') + (menuList.length ? menuList.map((x, i) => `<div class="sku-opt ${i === menuIdx ? 'on' : ''}" data-opt="${i}">
+      $('#sku-menu').innerHTML = inTable.slice(0, 5).map(i => `<div class="sku-opt intable" data-goto="${items.indexOf(i)}">✓ <b>${esc(i.ma_sku || i.ten_sku)}</b><span class="t">đã có thông tin SKU ở bên dưới</span></div>`).join('') + (menuList.length ? menuList.map((x, i) => `<div class="sku-opt ${i === menuIdx ? 'on' : ''}" data-opt="${i}">
           <b>${esc(x.ma_sku)}</b><span class="t">${same(x.ten_sku, x.ma_sku) ? '' : esc(x.ten_sku)}</span><span class="badge ${groupOf(x.nhom) === 'mau' ? 'b-purple' : 'b-blue'}">${esc(x.nhom || '—')}</span></div>`).join('')
           : inTable.length ? '' : `<div class="sku-opt empty">Không có SKU nào trong danh mục khớp "${esc(raw)}".</div>`) +
         (canNewSku ? `<div class="sku-opt create" data-opt="new">${icon('plus', 13)} Tạo SKU mới${raw ? ` “${esc(raw)}”` : ''}</div>` : '');
@@ -933,7 +942,9 @@
     };
     /* Thêm SKU xuống bảng: chưa có sản lượng năm trước thì SL = 0, gõ MT luôn */
     const pushSku = info => {
-      let it = items.find(i => same(i.ma_sku, info.ma_sku) || (!i.known && same(i.ten_sku, info.ten_sku)));
+      const shown = items.find(i => inGrid(i) && sameSku(i, info));
+      if (shown) return alreadyInGrid(shown);
+      let it = items.find(i => sameSku(i, info));   // có dữ liệu nhưng đang ẩn (SL = 0, đã bỏ) → hiện lại
       if (it) Object.assign(it, { xoa: false, known: true, ma_sku: info.ma_sku, ten_sku: info.ten_sku, nhom_sp: info.nhom, isNew: it.isNew || !UI.parseQty(it.sl) });
       else { it = { ma_sku: info.ma_sku, ten_sku: info.ten_sku, nhom_sp: info.nhom, known: true, sl: '', mt: '', isNew: true, xoa: false, changed: false }; items.unshift(it); }
       $('#sku-pick').value = ''; closeMenu();
@@ -976,10 +987,7 @@
     m.el.addEventListener('mousedown', e => {
       const gt = e.target.closest('[data-goto]');
       if (gt) {
-        e.preventDefault(); const it = items[Number(gt.dataset.goto)];
-        Object.assign(it, { xoa: false, isNew: it.isNew || true }); $('#sku-pick').value = ''; closeMenu(); draw();
-        const inp = m.el.querySelector(`tr[data-i="${items.indexOf(it)}"] input[data-f="mt"]`); if (inp) { inp.focus(); inp.select(); }
-        return;
+        e.preventDefault(); return alreadyInGrid(items[Number(gt.dataset.goto)]);
       }
       const o = e.target.closest('[data-opt]');
       if (o) { e.preventDefault(); pick(o.dataset.opt); }
@@ -1048,7 +1056,7 @@
         const open = !$('#sku-menu').hidden;
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (!open) return drawMenu(); menuIdx = Math.max(0, Math.min(menuList.length - 1, menuIdx + (e.key === 'ArrowDown' ? 1 : -1))); return drawMenu(); }
         if (e.key === 'Escape' && open) { e.stopPropagation(); return closeMenu(); }
-        if (e.key === 'Enter') { e.preventDefault(); return menuList.length ? pick(menuIdx) : (canNewSku && pick('new')); }
+        if (e.key === 'Enter') { e.preventDefault(); return menuList.length ? pick(menuIdx) : menuInGrid.length ? alreadyInGrid(menuInGrid[0]) : (canNewSku && pick('new')); }
         return;
       }
       if (e.key !== 'Enter') return;
