@@ -285,3 +285,4 @@ tr.selected td { background: var(--accent-soft) !important; }
 .sku-opt.create { color: var(--primary); font-weight: 600; border-top: 1px solid var(--line-2); margin-top: 2px; }
 .sku-table tr.sku-unknown td { background: #fffbeb; }
 .sku-opt.intable { color: var(--green); } .sku-opt.intable .t { color: var(--green); } .nhom-pick { padding: 4px 6px; font-size: 12px; width: auto; }
+@keyframes rowflash { 0%, 60% { background: #fef08a; } 100% { background: transparent; } } .sku-table tr.flash td { animation: rowflash 1.4s ease-out; }
