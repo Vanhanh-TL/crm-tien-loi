@@ -3,18 +3,30 @@
 (function () {
   const TABLES = ['KhachHang', 'CoHoi', 'ThiTruong', 'KeHoach', 'Telesale', 'HoatDong', 'NhanVien', 'MucTieu', 'SKU', 'MucTieuSKU'];
   const LS_KEY = 'crm-demo-v1';
+  const CACHE_KEY = 'crm-live-cache-v1';   // dữ liệu lần tải trước (chế độ Google Sheet) để mở app hiện ngay
 
   const Store = {
     mode: 'demo',   // demo | live | login
     me: null,       // { email, ten } khi đã đăng nhập
     missing: [],    // bảng mà Apps Script không trả về (đang chạy Code.gs cũ)
     loginError: '',
+    syncing: false,   // đang tải dữ liệu mới từ Google Sheet (đang hiện dữ liệu lần trước)
+    pending: null,    // Promise tải ngầm; App vẽ lại khi xong
     data: Object.fromEntries(TABLES.map(t => [t, []])),
 
     async init() {
+      // Có dữ liệu lần trước → hiện ngay, tải dữ liệu mới ở nền
+      const cached = readCache();
+      if (cached && location.protocol !== 'file:') {
+        this.mode = 'live'; this.me = cached.me || null; this.missing = cached.missing || [];
+        this.data = normalize({ ...this.data, ...cached.data });
+        this.syncing = true;
+        this.pending = this.fetchLive().finally(() => { this.syncing = false; });
+        return;
+      }
       try {
         const res = await call({ action: 'all' });
-        if (res.ok) { this.mode = 'live'; this.me = res.me || null; this.missing = TABLES.filter(t => !Array.isArray(res.data[t])); this.data = normalize({ ...this.data, ...res.data }); return; }
+        if (res.ok) { this.applyLive(res); return; }
         if (res.needLogin) { this.mode = 'login'; this.loginError = res.error === 'Chưa đăng nhập' ? '' : res.error; return; }
         console.warn('API chưa sẵn sàng → chạy DEMO:', res.error);
       } catch (e) { console.warn('Không gọi được /api → chạy DEMO'); }
@@ -27,7 +39,27 @@
       this.persist();
     },
 
+    applyLive(res) {
+      this.timing = res.timing || null;
+      if (this.timing) console.info('CRM tải dữ liệu:', this.timing.google_ms + ' ms chờ Google (Apps Script xử lý ' + this.timing.script_ms + ' ms)');
+      this.mode = 'live'; this.me = res.me || this.me || null;
+      this.missing = TABLES.filter(t => !Array.isArray(res.data[t]));
+      this.data = normalize({ ...Object.fromEntries(TABLES.map(t => [t, []])), ...res.data });
+      this.persist();
+    },
+
+    /* Tải dữ liệu mới khi đang hiện dữ liệu lần trước. Trả về 'ok' | 'login' | 'offline' */
+    async fetchLive() {
+      try {
+        const res = await call({ action: 'all' });
+        if (res.ok) { this.applyLive(res); return 'ok'; }
+        if (res.needLogin) { clearCache(); this.mode = 'login'; this.loginError = res.error === 'Chưa đăng nhập' ? '' : res.error; return 'login'; }
+        return 'offline';
+      } catch (e) { return 'offline'; }
+    },
+
     persist() {
+      if (this.mode === 'live') { writeCache({ data: this.data, me: this.me, missing: this.missing, t: Date.now() }); return; }
       if (this.mode !== 'demo') return;
       try { localStorage.setItem(LS_KEY, JSON.stringify(this.data)); } catch (e) { }
     },
@@ -37,12 +69,12 @@
     async reload() {
       if (this.mode !== 'live') return;
       const res = await call({ action: 'all' });
-      if (res.ok) { this.missing = TABLES.filter(t => !Array.isArray(res.data[t])); this.data = normalize({ ...this.data, ...res.data }); }
+      if (res.ok) this.applyLive(res);
     },
 
     requestOtp(email) { return call({ action: 'otp_request', email }); },
     verifyOtp(email, code) { return call({ action: 'otp_verify', email, code }); },
-    async logout() { await call({ action: 'logout' }); location.reload(); },
+    async logout() { clearCache(); await call({ action: 'logout' }); location.reload(); },
 
     get(table, id) { return this.data[table].find(r => String(r.id) === String(id)); },
 
@@ -147,6 +179,7 @@
     if (!ct.includes('json')) return { ok: false, error: 'HTTP ' + r.status };
     const res = await r.json();
     // Phiên hết hạn giữa chừng → về màn hình đăng nhập
+    if (res.needLogin) clearCache();
     if (res.needLogin && body.action !== 'all' && Store.mode === 'live') { alert('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.'); location.reload(); }
     return res;
   }
@@ -193,6 +226,10 @@
     });
     return res;
   }
+
+  function readCache() { try { const c = JSON.parse(localStorage.getItem(CACHE_KEY)); return c && c.data ? c : null; } catch (e) { return null; } }
+  function writeCache(c) { try { localStorage.setItem(CACHE_KEY, JSON.stringify(c)); } catch (e) { clearCache(); } }
+  function clearCache() { try { localStorage.removeItem(CACHE_KEY); } catch (e) { } }
 
   /* SKU dán tay thiếu mã → lấy tên làm mã (máy chủ cũng tự ghi lại vào Sheet) */
   function normalize(d) {

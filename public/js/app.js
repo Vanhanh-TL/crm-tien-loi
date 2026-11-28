@@ -33,11 +33,19 @@
       if (Store.mode === 'login') return renderLogin();
       if (!this.currentUser() && D().NhanVien[0]) try { localStorage.setItem('crm-user', D().NhanVien[0].ten); } catch (e) { }
       window.addEventListener('hashchange', () => this.render());
+      window.matchMedia('(max-width: 860px)').addEventListener('change', () => { if (!document.querySelector('.modal')) this.render(); });
+      // Đang hiện dữ liệu lần trước → khi tải xong dữ liệu mới thì vẽ lại
+      if (Store.pending) Store.pending.then(r => {
+        if (r === 'login') return renderLogin();
+        if (r === 'offline') toast('Chưa kết nối được Google Sheet — đang hiện dữ liệu lần trước', true);
+        if (!document.querySelector('.modal')) this.render(); else this._staleUi = true;
+      });
       window.addEventListener('beforeunload', e => { if (Targets.dirtyCount()) { e.preventDefault(); e.returnValue = ''; } });
       this.render();
     },
 
     render() {
+      syncCustomerGroups();
       this.route = (location.hash.replace(/^#\/?/, '') || 'tong-quan').split('?')[0];
       const view = VIEWS[this.route] || VIEWS['tong-quan'];
       const active = document.activeElement;
@@ -58,10 +66,17 @@
     },
   };
 
+  const isMobile = () => window.matchMedia('(max-width: 860px)').matches;
+
+  /* Nhóm KD của khách hàng luôn theo nhóm KD của NVKD phụ trách (bảng Nhân viên); NVKD chưa có nhóm thì giữ giá trị cũ */
+  function syncCustomerGroups() {
+    D().KhachHang.forEach(k => { const g = UI.staffGroup(k.nvkd); if (g) k.nhom_kd = g; });
+  }
+
   function sidebar() {
     const me = App.currentUser();
     return `<aside class="sidebar">
-      <div class="brand"><div class="brand-logo">TL</div>CRM TIẾN LỢI</div>
+      <div class="brand"><div class="brand-logo">TL</div>CRM TIẾN LỢI<button class="btn btn-ghost btn-sm sidebar-close" data-act="menu-close" title="Thu gọn menu">${icon('x')}</button></div>
       ${NAV.map(g => `<div class="nav-group"><div class="nav-title">${g.group}</div>
         ${g.items.map(i => `<a class="nav-item ${App.route === i.id ? 'active' : ''}" href="#/${i.id}">${icon(i.icon)}${i.label}${i.count ? `<span class="count">${i.count()}</span>` : ''}</a>`).join('')}</div>`).join('')}
       <div class="sidebar-foot">
@@ -69,9 +84,9 @@
           <button class="btn btn-sm" data-act="logout" style="width:100%;justify-content:center;margin-bottom:10px">Đăng xuất</button>` :
         `<div class="field" style="min-width:0;margin-bottom:10px"><label>Bạn là</label>
           <select class="input" data-act="me">${D().NhanVien.map(n => `<option ${n.ten === me ? 'selected' : ''}>${esc(n.ten)}</option>`).join('')}</select></div>`}
-        <div class="between"><span class="mode-pill ${Store.mode}">${Store.mode === 'live' ? 'Google Sheet' : 'Chế độ demo'}</span>
+        <div class="between"><span class="mode-pill ${Store.mode}" title="${Store.timing ? `Lần tải gần nhất: ${(Store.timing.google_ms / 1000).toFixed(1)} giây chờ Google Sheet (Apps Script xử lý ${((Store.timing.script_ms || 0) / 1000).toFixed(1)} giây)` : ''}">${Store.mode === 'live' ? (Store.syncing ? 'Đang cập nhật…' : 'Google Sheet') : 'Chế độ demo'}</span>
         ${Store.mode === 'demo' ? '<button class="btn btn-sm btn-ghost" data-act="reset-demo" title="Xóa dữ liệu demo và tạo lại">Làm mới</button>' : '<button class="btn btn-sm btn-ghost" data-act="reload">Tải lại</button>'}</div>
-      </div></aside>`;
+      </div></aside><div class="sidebar-backdrop" data-act="menu-close"></div>`;
   }
 
   function bindCommon(view) {
@@ -86,6 +101,7 @@
       if (!el || el.tagName === 'SELECT') return;
       const act = el.dataset.act;
       if (act === 'menu') return document.querySelector('.sidebar').classList.toggle('open');
+      if (act === 'menu-close') return document.querySelector('.sidebar').classList.remove('open');
       if (act === 'reset-demo') { if (confirm('Xóa dữ liệu demo đã nhập và tạo lại dữ liệu mẫu?')) Store.resetDemo(); return; }
       if (act === 'reload') { await Store.reload(); App.render(); return toast('Đã tải lại dữ liệu'); }
       if (act === 'logout') { if (confirm('Đăng xuất khỏi CRM?')) Store.logout(); return; }
@@ -712,6 +728,7 @@
       const skuCell = r => `<div class="sku-cell">
           ${r.skus.length ? `<button class="sku-chip ${r.nReg ? '' : 'empty'}" data-act="sku" data-id="${esc(r.k.id)}" title="Danh sách SKU của khách (SL năm trước + mục tiêu)">${r.skus.length} SKU${r.nReg ? ` · ${r.nReg} có MT` : ''}</button>` : ''}
           <button class="btn btn-sm sku-add" data-act="sku-add" data-id="${esc(r.k.id)}" title="Thêm mục tiêu theo SKU">${icon('plus', 14)}</button></div>`;
+      const mob = isMobile();
       const totalCells = (pfx) => `${MT_GROUPS.map(([g, , ds, mt]) => `<td class="num" id="${pfx}-${ds}"></td><td class="num" id="${pfx}-${mt}"></td><td class="num" id="${pfx}-g-${g}"></td>`).join('')}<td id="${pfx}-sku"></td><td></td><td class="num" id="${pfx}-skumt"></td><td class="num" id="${pfx}-all"></td>`;
 
       return head0 + warn + `<div class="filters">
@@ -720,11 +737,11 @@
           ${isManager(me) || isLeader(me) ? selectHtml('nvkd', 'NVKD phụ trách', uniq(visible.map(k => k.nvkd)), s.nvkd) : ''}
           <div class="field"><label>Hiển thị</label><select class="input" data-filter="loc"><option value="">Tất cả</option><option value="chua" ${s.loc === 'chua' ? 'selected' : ''}>Chưa nhập mục tiêu</option><option value="co" ${s.loc === 'co' ? 'selected' : ''}>Đã nhập mục tiêu</option></select></div>
         </div>
-        <div class="kpis">${MT_GROUPS.map(([g, label]) => `<div class="kpi"><div class="label">${label} · mục tiêu ${nam}</div><div class="value" id="kpi-mt-${g}"></div><div class="hint" id="kpi-hint-${g}"></div></div>`).join('')}
+        <div class="kpis kpis-target">${MT_GROUPS.map(([g, label]) => `<div class="kpi"><div class="label">${label} · mục tiêu ${nam}</div><div class="value" id="kpi-mt-${g}"></div><div class="hint" id="kpi-hint-${g}"></div></div>`).join('')}
           <div class="kpi"><div class="label">Tổng mục tiêu ${nam}</div><div class="value" id="kpi-mt-all"></div><div class="hint" id="kpi-hint-all"></div></div>
           <div class="kpi"><div class="label">Đã nhập mục tiêu</div><div class="value" id="kpi-done"></div><div class="hint" id="kpi-done-hint"></div></div></div>
         <div class="scope-note">${scope}${canDs ? '' : ` Sản lượng ${prev} do Quản lý cập nhật.`} Gõ số tấn (số lẻ dùng dấu phẩy, vd 12,5) rồi bấm <b>Lưu mục tiêu</b>. Bấm <b>+</b> ở cột <b>Mục tiêu SKU</b> để đặt mục tiêu chi tiết theo SKU — khi đó MT nhóm tự bằng tổng các SKU.</div>
-        <div class="table-wrap"><table class="target-table"><thead>
+        <div class="table-wrap">${mob ? this.mobileTable(groups, cell, skuCell, nam, prev, canDs) : `<table class="target-table"><thead>
           <tr><th rowspan="2">Khách hàng</th>${MT_GROUPS.map(([g, label]) => `<th colspan="3" class="grp grp-${g}">${label}</th>`).join('')}<th rowspan="2">Mục tiêu SKU</th><th rowspan="2">Ghi chú</th><th rowspan="2" class="num">Tổng MT SKU</th><th rowspan="2" class="num">Tổng MT ${nam}</th></tr>
           <tr>${MT_GROUPS.map(([g]) => `<th class="num grp-${g}">SL ${prev}</th><th class="num grp-${g}">MT ${nam}</th><th class="num grp-${g}">±</th>`).join('')}</tr>
         </thead>
@@ -732,15 +749,35 @@
           <tr class="nv-row" data-act="toggle-nv" data-nv="${esc(G.name)}"><td><span class="chev ${closed ? 'closed' : ''}">${icon('chevron', 14)}</span>${staff(G.name)}<span class="muted small" style="margin-left:6px">${G.rows.length} KH</span></td>${totalCells('g' + gi)}</tr>
           ${closed ? '' : G.rows.map(r => `<tr data-row="${esc(r.k.id)}">
             <td><div class="name">${esc(r.k.ten)}</div><div class="meta muted small">${esc(r.k.ma_kh)}${r.k.tinh ? ' · ' + esc(r.k.tinh) : ''}</div></td>
-            ${MT_GROUPS.map(([g, , ds, mt]) => `<td class="num">${cell(r, ds, canDs)}</td><td class="num">${cell(r, mt, true)}</td><td class="num" data-g="${g}">${growth(this.val(r, mt), this.val(r, ds))}</td>`).join('')}
+            ${MT_GROUPS.map(([g, , ds, mt]) => `<td class="num">${cell(r, ds, canDs)}</td><td class="num">${cell(r, mt, true)}</td><td class="num" data-gid="${esc(r.k.id)}" data-g="${g}">${growth(this.val(r, mt), this.val(r, ds))}</td>`).join('')}
             <td>${skuCell(r)}</td>
             <td><input class="input cell note ${s.edits[r.k.id]?.ghi_chu !== undefined ? 'dirty' : ''}" data-id="${esc(r.k.id)}" data-k="ghi_chu" value="${esc(s.edits[r.k.id]?.ghi_chu ?? r.t?.ghi_chu ?? '')}" placeholder="…"></td>
             <td class="num">${r.nReg ? `<span class="sku-total" data-act="sku" data-id="${esc(r.k.id)}">${fmtDS(r.skuTotal)}</span>` : '<span class="muted">—</span>'}</td>
-            <td class="num" data-total><b>${fmtDS(this.val(r, 'mt_ma_mau') + this.val(r, 'mt_kem_lanh'))}</b></td>
+            <td class="num" data-gid="${esc(r.k.id)}" data-total><b>${fmtDS(this.val(r, 'mt_ma_mau') + this.val(r, 'mt_kem_lanh'))}</b></td>
           </tr>`).join('')}</tbody>`; }).join('')}
         </table>
-        ${rows.length ? '' : `<div class="empty">${visible.length ? 'Không có khách hàng phù hợp bộ lọc.' : 'Bạn chưa được giao khách hàng nào (cột "NVKD phụ trách" ở trang Khách hàng).'}</div>`}</div>
+`}        ${rows.length ? '' : `<div class="empty">${visible.length ? 'Không có khách hàng phù hợp bộ lọc.' : 'Bạn chưa được giao khách hàng nào (cột "NVKD phụ trách" ở trang Khách hàng).'}</div>`}</div>
         <span hidden data-ncol="${NCOL}"></span>`;
+    },
+    /* Điện thoại: mỗi khách 1 dòng (tên + tổng MT); bấm tên → mở ô sản lượng + nhập mục tiêu ngay bên dưới */
+    mobileTable(groups, cell, skuCell, nam, prev, canDs) {
+      const s = this.st();
+      s.open = s.open || {};
+      return `<table class="target-table m-table"><thead><tr><th>Khách hàng</th><th class="num">Tổng MT ${nam}</th></tr></thead>
+        ${groups.map((G, gi) => { const closed = !!s.collapsed[G.name]; return `<tbody class="nv-group">
+          <tr class="nv-row" data-act="toggle-nv" data-nv="${esc(G.name)}"><td><span class="chev ${closed ? 'closed' : ''}">${icon('chevron', 14)}</span>${staff(G.name)}<span class="muted small" style="margin-left:6px">${G.rows.length} KH</span></td><td class="num" id="g${gi}-all"></td></tr>
+          ${closed ? '' : G.rows.map(r => { const open = !!s.open[r.k.id]; return `
+            <tr class="m-row ${open ? 'open' : ''}" data-act="m-open" data-id="${esc(r.k.id)}">
+              <td><div class="name"><span class="chev ${open ? '' : 'closed'}">${icon('chevron', 13)}</span>${esc(r.k.ten)}</div><div class="meta muted small">${esc(r.k.ma_kh)}${r.skus.length ? ` · ${r.skus.length} SKU${r.nReg ? ` (${r.nReg} có MT)` : ''}` : ''}</div></td>
+              <td class="num" data-gid="${esc(r.k.id)}" data-total><b>${fmtDS(this.val(r, 'mt_ma_mau') + this.val(r, 'mt_kem_lanh'))}</b></td>
+            </tr>
+            ${open ? `<tr class="m-detail"><td colspan="2">
+              ${MT_GROUPS.map(([g, label, ds, mt]) => `<div class="m-grp m-${g}"><div class="m-lbl">${label}</div>
+                <div class="m-cells"><div><span>SL ${prev}</span>${cell(r, ds, canDs)}</div><div><span>MT ${nam}</span>${cell(r, mt, true)}</div><div><span>±</span><b data-gid="${esc(r.k.id)}" data-g="${g}">${growth(this.val(r, mt), this.val(r, ds))}</b></div></div></div>`).join('')}
+              <div class="m-foot"><span class="muted small">Mục tiêu SKU</span>${skuCell(r)}${r.nReg ? `<span class="sku-total" data-act="sku" data-id="${esc(r.k.id)}">${fmtDS(r.skuTotal)}</span>` : ''}</div>
+              <input class="input cell note ${s.edits[r.k.id]?.ghi_chu !== undefined ? 'dirty' : ''}" data-id="${esc(r.k.id)}" data-k="ghi_chu" value="${esc(s.edits[r.k.id]?.ghi_chu ?? r.t?.ghi_chu ?? '')}" placeholder="Ghi chú…">
+            </td></tr>` : ''}`; }).join('')}</tbody>`; }).join('')}
+      </table>`;
     },
     mount() {
       if (!this._rows) return;
@@ -769,11 +806,11 @@
       const prev = Number(this.st().nam) - 1;
       if (rowId) {
         const r = rows.find(x => String(x.k.id) === String(rowId));
-        const tr = document.querySelector(`tr[data-row="${CSS.escape(String(rowId))}"]`);
-        if (r && tr) {
-          MT_GROUPS.forEach(([g, , ds, mt]) => { tr.querySelector(`[data-g="${g}"]`).innerHTML = growth(this.val(r, mt), this.val(r, ds)); });
-          tr.querySelector('[data-total]').innerHTML = `<b>${fmtDS(this.val(r, 'mt_ma_mau') + this.val(r, 'mt_kem_lanh'))}</b>`;
-        }
+        if (r) document.querySelectorAll(`[data-gid="${CSS.escape(String(rowId))}"]`).forEach(el => {
+          const g = MT_GROUPS.find(x => x[0] === el.dataset.g);
+          if (g) el.innerHTML = growth(this.val(r, g[3]), this.val(r, g[2]));
+          else if ('total' in el.dataset) el.innerHTML = `<b>${fmtDS(this.val(r, 'mt_ma_mau') + this.val(r, 'mt_kem_lanh'))}</b>`;
+        });
       }
       // % tăng trưởng chỉ so trên các KH đã nhập mục tiêu (tránh ra số âm khi mới nhập được vài KH)
       const totals = (list, pfx) => {
@@ -827,6 +864,7 @@
       },
       sku(ds) { openSkuTargets(ds.id, false); },
       'sku-add'(ds) { openSkuTargets(ds.id, true); },
+      'm-open'(ds) { const s = Targets.st(); s.open = s.open || {}; s.open[ds.id] = !s.open[ds.id]; App.render(); if (s.open[ds.id]) setTimeout(() => { const i = document.querySelector(`.m-detail input[data-id="${CSS.escape(ds.id)}"][data-k^="mt_"]`); i && i.focus(); }, 30); },
       'toggle-nv'(ds) { const s = Targets.st(); s.collapsed[ds.nv] = !s.collapsed[ds.nv]; App.render(); },
       export() {
         const rows = (Targets._rows || []).map(r => ({ nam: Targets.st().nam, ma_kh: r.k.ma_kh, ten_kh: r.k.ten, nvkd: r.k.nvkd, ghi_chu: r.t?.ghi_chu || '',
@@ -1119,7 +1157,7 @@
       return head('Thiết lập', 'Nhân viên', 'Danh sách dùng cho các ô "NVKD phụ trách", "Nhân viên gọi"…',
         `<button class="btn btn-primary" data-act="new">${icon('plus', 15)} Thêm nhân viên</button>`) +
         `<div class="table-wrap"><table><thead><tr><th>Họ tên</th><th>Email</th><th>SĐT</th><th>Nhóm KD</th><th>Vai trò</th><th class="num">Khách hàng</th><th class="num">Cơ hội mở</th><th>Trạng thái</th></tr></thead><tbody>
-        ${rows.map(n => `<tr class="clickable" data-act="edit" data-id="${esc(n.id)}"><td>${staff(n.ten)}</td><td>${esc(n.email)}</td><td>${esc(n.sdt)}</td><td>${esc(n.nhom_kd)}</td><td>${esc(n.vai_tro)}</td>
+        ${rows.map(n => `<tr class="clickable" data-act="edit" data-id="${esc(n.id)}"><td>${staff(n.ten, false)}</td><td>${esc(n.email)}</td><td>${esc(n.sdt)}</td><td>${esc(n.nhom_kd)}</td><td>${esc(n.vai_tro)}</td>
           <td class="num">${D().KhachHang.filter(k => k.nvkd === n.ten).length}</td><td class="num">${D().CoHoi.filter(c => c.nvkd === n.ten && isOpen(c)).length}</td><td>${badge(n.trang_thai)}</td></tr>`).join('')}
         </tbody></table></div>`;
     },
