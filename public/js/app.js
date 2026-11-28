@@ -27,10 +27,22 @@
     },
     st(view, defaults) { return (this.ui[view] = this.ui[view] || { ...defaults }); },
 
+    showError(msg) {
+      document.getElementById('app').innerHTML = `<div class="login-wrap"><div class="login-card">
+        <div class="brand" style="padding:0 0 6px"><div class="brand-logo">TL</div>CRM TIẾN LỢI</div>
+        <h2>Chưa tải được dữ liệu</h2><div class="login-err">${esc(msg)}</div>
+        <p class="muted small">Nếu vừa cập nhật code trên GitHub: kiểm tra đã cập nhật <b>đủ các file</b> trong public/js (app.js, store.js, ui.js, schema.js) rồi nhấn Ctrl + F5. Nếu lỗi do Google Sheet: thử lại sau ít phút.</p>
+        <button class="btn btn-primary" onclick="location.reload()">Thử lại</button></div></div>`;
+    },
     async start() {
+      try { await this.startInner(); }
+      catch (e) { console.error(e); this.showError('Lỗi giao diện: ' + (e && e.message || e)); }
+    },
+    async startInner() {
       document.getElementById('app').innerHTML = '<div class="loading">Đang tải dữ liệu…</div>';
       await Store.init();
       if (Store.mode === 'login') return renderLogin();
+      if (Store.mode === 'error') return this.showError(Store.loginError);
       if (!this.currentUser() && D().NhanVien[0]) try { localStorage.setItem('crm-user', D().NhanVien[0].ten); } catch (e) { }
       window.addEventListener('hashchange', () => this.render());
       window.matchMedia('(max-width: 860px)').addEventListener('change', () => { if (!document.querySelector('.modal')) this.render(); });
@@ -70,7 +82,8 @@
 
   /* Nhóm KD của khách hàng luôn theo nhóm KD của NVKD phụ trách (bảng Nhân viên); NVKD chưa có nhóm thì giữ giá trị cũ */
   function syncCustomerGroups() {
-    D().KhachHang.forEach(k => { const g = UI.staffGroup(k.nvkd); if (g) k.nhom_kd = g; });
+    const groupOf = UI.staffGroup || (name => { const s = String(name || '').trim().toLowerCase(); const n = s && D().NhanVien.find(x => String(x.ten || '').trim().toLowerCase() === s); return n ? String(n.nhom_kd || '').trim() : ''; });
+    D().KhachHang.forEach(k => { const g = groupOf(k.nvkd); if (g) k.nhom_kd = g; });
   }
 
   function sidebar() {

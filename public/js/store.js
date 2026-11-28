@@ -28,8 +28,9 @@
         const res = await call({ action: 'all' });
         if (res.ok) { this.applyLive(res); return; }
         if (res.needLogin) { this.mode = 'login'; this.loginError = res.error === 'Chưa đăng nhập' ? '' : res.error; return; }
+        if (!res._noApi) { this.mode = 'error'; this.loginError = res.error || 'Lỗi không xác định'; return; }
         console.warn('API chưa sẵn sàng → chạy DEMO:', res.error);
-      } catch (e) { console.warn('Không gọi được /api → chạy DEMO'); }
+      } catch (e) { this.mode = 'error'; this.loginError = String(e && e.message || e); return; }
       this.mode = 'demo';
       let saved = null;
       try { saved = JSON.parse(localStorage.getItem(LS_KEY)); } catch (e) { }
@@ -172,12 +173,20 @@
     },
   };
 
+  const TIMEOUT_MS = 45000;   // Google Sheet chậm quá 45 giây → báo lỗi, không treo mãi
   async function call(body) {
-    if (location.protocol === 'file:') return { ok: false, error: 'file://' };
-    const r = await fetch('/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (location.protocol === 'file:') return { ok: false, error: 'file://', _noApi: true };
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+    let r;
+    try { r = await fetch('/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: ctl.signal }); }
+    catch (e) { return { ok: false, error: e.name === 'AbortError' ? 'Google Sheet phản hồi quá chậm (quá ' + TIMEOUT_MS / 1000 + ' giây).' : 'Không kết nối được máy chủ. Kiểm tra mạng.' }; }
+    finally { clearTimeout(timer); }
     const ct = r.headers.get('content-type') || '';
-    if (!ct.includes('json')) return { ok: false, error: 'HTTP ' + r.status };
+    if (!ct.includes('json')) return { ok: false, error: 'HTTP ' + r.status, _noApi: r.status === 404 };
     const res = await r.json();
+    // Máy chủ chưa nối Google Sheet (chưa đặt APPS_SCRIPT_URL / API_TOKEN, hoặc chạy thử trên máy) → chế độ demo
+    if (r.status === 503) res._noApi = true;
     // Phiên hết hạn giữa chừng → về màn hình đăng nhập
     if (res.needLogin) clearCache();
     if (res.needLogin && body.action !== 'all' && Store.mode === 'live') { alert('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.'); location.reload(); }
