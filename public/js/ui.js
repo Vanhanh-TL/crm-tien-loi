@@ -68,7 +68,13 @@
   const color = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return COLORS[h % COLORS.length]; };
   const initial = s => { const w = String(s || '?').trim().split(/\s+/); return (w[w.length - 1] || '?')[0].toUpperCase(); };
   const avatar = (name, cls = '') => `<span class="avatar ${cls}" style="background:${color(name)}">${esc(initial(name))}</span>`;
-  const staff = name => name ? `<span class="staff">${avatar(name)}${esc(name)}</span>` : '<span class="muted">—</span>';
+  /* Nhóm KD của một nhân viên (theo bảng Nhân viên) */
+  const staffGroup = name => { const s = String(name || '').trim().toLowerCase(); const n = s && (window.Store?.data?.NhanVien || []).find(x => String(x.ten || '').trim().toLowerCase() === s); return n ? String(n.nhom_kd || '').trim() : ''; };
+  const staff = (name, showGroup = true) => {
+    if (!name) return '<span class="muted">—</span>';
+    const g = showGroup ? staffGroup(name) : '';
+    return `<span class="staff">${avatar(name)}${esc(name)}${g ? `<span class="grp-tag">${esc(g)}</span>` : ''}</span>`;
+  };
 
   const BADGE = {
     'Tiềm năng': 'b-purple', 'Đang giao dịch': 'b-green', 'Tạm dừng': 'b-orange', 'Ngừng giao dịch': 'b-red',
@@ -188,6 +194,16 @@
     form.querySelectorAll('[data-money]').forEach(i => i.addEventListener('input', () => {
       const n = parseMoney(i.value); i.value = i.value.trim() === '' ? '' : n.toLocaleString('vi-VN');
     }));
+    const nvSel = form.elements.nvkd, grpSel = form.elements.nhom_kd;
+    if (nvSel && grpSel) {
+      const syncGroup = () => {
+        const g = staffGroup(nvSel.value);
+        if (g) { if (![...grpSel.options].some(o => o.value === g)) grpSel.add(new Option(g, g)); grpSel.value = g; }
+        grpSel.disabled = !!g;
+        grpSel.title = g ? 'Tự lấy theo nhóm KD của NVKD trong bảng Nhân viên' : '';
+      };
+      nvSel.addEventListener('change', syncGroup); syncGroup();
+    }
     m.el.querySelector('[data-cancel]').onclick = m.close;
     const saveBtn = m.el.querySelector('[data-save]');
     const save = async e => {
@@ -225,5 +241,5 @@
     <select class="input" data-filter="${name}"><option value="">${all}</option>${list.map(o => `<option ${o === cur ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></div>`;
   const uniq = arr => [...new Set(arr.filter(Boolean))].sort((a, b) => String(a).localeCompare(b, 'vi'));
 
-  window.UI = { esc, num, parseMoney, parseQty, typeQty, fmt, toDate, localInput, monthOptions, nowLocal, today, thisMonth, sameDay, avatar, staff, badge, progress, icon, toast, modal, openForm, selectHtml, uniq, color };
+  window.UI = { staffGroup, esc, num, parseMoney, parseQty, typeQty, fmt, toDate, localInput, monthOptions, nowLocal, today, thisMonth, sameDay, avatar, staff, badge, progress, icon, toast, modal, openForm, selectHtml, uniq, color };
 })();
