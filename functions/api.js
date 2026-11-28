@@ -35,11 +35,17 @@ export async function onRequestPost({ request, env }) {
   if (!user) return json({ ok: false, needLogin: true, error: 'Chưa đăng nhập' }, 401);
 
   if (action === 'all') {
-    // Mỗi lần mở app: kiểm tra lại quyền (phòng khi nhân viên đã bị chuyển "Nghỉ việc")
-    const chk = await callScript(env, { action: 'check_user', email: user.e });
-    if (!chk.ok) return json({ ok: false, needLogin: true, error: chk.error }, 401, { 'Set-Cookie': clearCookie() });
-    const res = await callScript(env, { action: 'all', user: user.e });
-    if (res.ok) res.me = chk.data;
+    // Mỗi lần mở app: kiểm tra lại quyền (phòng khi nhân viên đã bị chuyển "Nghỉ việc") — gộp chung 1 lần gọi với lấy dữ liệu
+    const t0 = Date.now();
+    const res = await callScript(env, { action: 'all', user: user.e, check: true });
+    // Đo độ trễ: tổng thời gian Cloudflare chờ Google, trong đó Apps Script tự xử lý bao lâu
+    res.timing = { google_ms: Date.now() - t0, script_ms: res.ms || null };
+    if (res.needLogin) return json({ ok: false, needLogin: true, error: res.error }, 401, { 'Set-Cookie': clearCookie() });
+    if (res.ok && !res.me) {   // Apps Script bản cũ chưa hỗ trợ "check" → kiểm tra riêng như trước
+      const chk = await callScript(env, { action: 'check_user', email: user.e });
+      if (!chk.ok) return json({ ok: false, needLogin: true, error: chk.error }, 401, { 'Set-Cookie': clearCookie() });
+      res.me = chk.data;
+    }
     return json(res);
   }
   // `user` = email đã đăng nhập (lấy từ cookie đã ký, trình duyệt không giả mạo được) → Apps Script dùng để phân quyền
