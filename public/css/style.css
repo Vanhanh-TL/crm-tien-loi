@@ -302,22 +302,54 @@ tr.selected td { background: var(--accent-soft) !important; }
   .kpis-target .kpi .value { font-size: 17px; margin-top: 2px; }
   .kpis-target .kpi .hint { font-size: 10.5px; }
 
-  /* Bảng mục tiêu: bấm tên khách → ô sản lượng + mục tiêu hiện bên dưới */
-  .m-table td, .m-table th { white-space: normal; }
-  .target-table.m-table tbody td:first-child, .target-table.m-table thead tr:first-child th:first-child { position: static; }
-  .m-table th { text-align: left; }
-  .m-row { cursor: pointer; }
-  .m-row .name { display: flex; align-items: center; gap: 2px; }
-  .m-row.open td { background: var(--primary-soft); border-bottom: none; }
-  .m-detail td { background: #fafbfd; padding: 10px 12px 14px; }
-  .m-grp { margin-bottom: 10px; }
-  .m-lbl { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
-  .m-mau .m-lbl { color: #6d28d9; }
-  .m-kem .m-lbl { color: #1d4ed8; }
-  .m-cells { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 54px; gap: 8px; align-items: end; }
-  .m-cells span { display: block; font-size: 11px; color: var(--muted); margin-bottom: 2px; }
-  .m-cells b { display: block; padding: 6px 0; text-align: right; }
-  .m-detail .cell { width: 100%; }
-  .m-detail .cell.note { width: 100%; margin-top: 4px; }
-  .m-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0 8px; }
+}
+
+/* ---------- Bảng mục tiêu dạng "bấm tên mở chi tiết" (màn hình hẹp < 1240px: điện thoại, máy tính bảng, laptop nhỏ) ---------- */
+/* Bảng mục tiêu: bấm tên khách → ô sản lượng + mục tiêu hiện bên dưới */
+.m-table td, .m-table th { white-space: normal; }
+.target-table.m-table tbody td:first-child, .target-table.m-table thead tr:first-child th:first-child { position: static; }
+.m-table th { text-align: left; }
+.m-row { cursor: pointer; }
+.m-row .name { display: flex; align-items: center; gap: 2px; }
+.m-row.open td { background: var(--primary-soft); border-bottom: none; }
+.m-detail td { background: #fafbfd; padding: 10px 12px 14px; }
+.m-grp { margin-bottom: 10px; }
+.m-lbl { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+.m-mau .m-lbl { color: #6d28d9; }
+.m-kem .m-lbl { color: #1d4ed8; }
+.m-cells { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 54px; gap: 8px; align-items: end; }
+.m-cells span { display: block; font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+.m-cells b { display: block; padding: 6px 0; text-align: right; }
+.m-detail .cell { width: 100%; }
+.m-detail .cell.note { width: 100%; margin-top: 4px; }
+.m-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0 8px; }
+
+@media (min-width: 600px) {
+  .m-detail .m-grp { display: inline-block; width: calc(50% - 10px); vertical-align: top; margin-right: 8px; }
+}
+
+/* ---------- Bảng mục tiêu dạng lưới (màn hình rộng) ---------- */
+/* Cột tên khách: hẹp lại, tên dài tự xuống dòng (tên in hoa dài làm bảng tràn sang phải) */
+.target-table:not(.m-table) tbody tr[data-row] td:first-child { white-space: normal; width: 240px; min-width: 200px; max-width: 260px; }
+.target-table:not(.m-table) tbody tr[data-row] td:first-child .name { font-size: 13px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.target-table:not(.m-table) .nv-row td:first-child { white-space: normal; }
+.target-table:not(.m-table) .nv-row .staff { flex-wrap: wrap; row-gap: 2px; }
+/* Laptop: thu gọn ô nhập và khoảng cách để vừa màn hình */
+@media (max-width: 1600px) {
+  .target-table:not(.m-table) td, .target-table:not(.m-table) th { padding: 6px 7px; }
+  .target-table:not(.m-table) th { font-size: 10.5px; letter-spacing: .03em; }
+  .target-table:not(.m-table) .cell { width: 74px; padding: 5px 6px; }
+  .target-table:not(.m-table) .cell.note { width: 96px; }
+  .target-table:not(.m-table) .chip-extra { display: none; }
+  .target-table:not(.m-table) .sku-cell { gap: 4px; }
+  .target-table:not(.m-table) .sku-locked { flex-direction: column; align-items: flex-end; gap: 1px; }
+  .target-table:not(.m-table) .sku-chip { padding: 2px 8px; }
+  .target-table:not(.m-table) tbody tr[data-row] td:first-child { width: 190px; min-width: 170px; max-width: 190px; }
+}
+@media (max-width: 1366px) {
+  .target-table:not(.m-table) td, .target-table:not(.m-table) th { padding: 5px 5px; }
+  .target-table:not(.m-table) .cell { width: 66px; font-size: 13px; }
+  .target-table:not(.m-table) .cell.note { width: 80px; }
+  .target-table:not(.m-table) tbody tr[data-row] td:first-child { width: 165px; min-width: 150px; max-width: 165px; }
+  .target-table:not(.m-table) .growth, .target-table:not(.m-table) td.num { font-size: 12.5px; }
 }
