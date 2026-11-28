@@ -45,7 +45,7 @@
       if (Store.mode === 'error') return this.showError(Store.loginError);
       if (!this.currentUser() && D().NhanVien[0]) try { localStorage.setItem('crm-user', D().NhanVien[0].ten); } catch (e) { }
       window.addEventListener('hashchange', () => this.render());
-      window.matchMedia('(max-width: 860px)').addEventListener('change', () => { if (!document.querySelector('.modal')) this.render(); });
+      window.matchMedia(NARROW_Q).addEventListener('change', () => { if (!document.querySelector('.modal')) this.render(); });
       // Đang hiện dữ liệu lần trước → khi tải xong dữ liệu mới thì vẽ lại
       if (Store.pending) Store.pending.then(r => {
         if (r === 'login') return renderLogin();
@@ -79,6 +79,8 @@
   };
 
   const isMobile = () => window.matchMedia('(max-width: 860px)').matches;
+  const NARROW_Q = '(max-width: 1240px)';
+  const isNarrow = () => window.matchMedia(NARROW_Q).matches;
 
   /* Nhóm KD của khách hàng luôn theo nhóm KD của NVKD phụ trách (bảng Nhân viên); NVKD chưa có nhóm thì giữ giá trị cũ */
   function syncCustomerGroups() {
@@ -739,9 +741,9 @@
           : `<span class="${raw ? '' : 'muted'}">${raw ? esc(fmtDS(num(r.t[key]))) : '—'}</span>`;
       };
       const skuCell = r => `<div class="sku-cell">
-          ${r.skus.length ? `<button class="sku-chip ${r.nReg ? '' : 'empty'}" data-act="sku" data-id="${esc(r.k.id)}" title="Danh sách SKU của khách (SL năm trước + mục tiêu)">${r.skus.length} SKU${r.nReg ? ` · ${r.nReg} có MT` : ''}</button>` : ''}
+          ${r.skus.length ? `<button class="sku-chip ${r.nReg ? '' : 'empty'}" data-act="sku" data-id="${esc(r.k.id)}" title="Danh sách SKU của khách (SL năm trước + mục tiêu)">${r.skus.length} SKU${r.nReg ? `<span class="chip-extra"> · ${r.nReg} có MT</span>` : ''}</button>` : ''}
           <button class="btn btn-sm sku-add" data-act="sku-add" data-id="${esc(r.k.id)}" title="Thêm mục tiêu theo SKU">${icon('plus', 14)}</button></div>`;
-      const mob = isMobile();
+      const mob = isNarrow();   // < 1240px: bố cục bấm tên khách mở chi tiết
       const totalCells = (pfx) => `${MT_GROUPS.map(([g, , ds, mt]) => `<td class="num" id="${pfx}-${ds}"></td><td class="num" id="${pfx}-${mt}"></td><td class="num" id="${pfx}-g-${g}"></td>`).join('')}<td id="${pfx}-sku"></td><td></td><td class="num" id="${pfx}-skumt"></td><td class="num" id="${pfx}-all"></td>`;
 
       return head0 + warn + `<div class="filters">
